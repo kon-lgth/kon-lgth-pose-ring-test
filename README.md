@@ -26,19 +26,19 @@ pip install opencv-python numpy
 ## 実行手順
 ① キャリブレーション画像の取得
 ```bash
-python capture_calibration_pairs.py
+capture_calibration_pairs.py
 ```
 → calibration_images フォルダに画像が保存されます
 
 ② ステレオキャリブレーション
 ```bash
-python stereo_calibrate_from_saved_pairs.py
+stereo_calibrate_from_saved_pairs.py
 ```
 → キャリブレーション結果（.npz ファイル）が生成されます
 
 ③ 3D計測
 ```bash
-python green_3d_from_calibration.py
+green_3d_from_calibration.py
 ```
 → 緑色マーカーの3次元座標が計算されます
 
