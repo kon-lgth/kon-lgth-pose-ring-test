@@ -25,37 +25,43 @@ pip install opencv-python numpy
 
 ## 実行手順
 ① キャリブレーション画像の取得
+```bash
 python capture_calibration_pairs.py
-
+```
 → calibration_images フォルダに画像が保存されます
 
 ② ステレオキャリブレーション
+```bash
 python stereo_calibrate_from_saved_pairs.py
-
+```
 → キャリブレーション結果（.npz ファイル）が生成されます
 
 ③ 3D計測
+```bash
 python green_3d_from_calibration.py
-
+```
 → 緑色マーカーの3次元座標が計算されます
 
 ## 事前に変更が必要な箇所
 カメラインデックス
 
 環境によってカメラ番号が異なるため、必要に応じて変更してください。
-
+```
 CAM0_INDEX = 0
 CAM1_INDEX = 1
+```
 セッションフォルダ
 
 キャリブレーションで保存されたフォルダを指定してください。
-
+```python
 SESSION_DIR = "calibration_images/xxxx"
+```
 キャリブレーションファイル
 
 生成された .npz ファイルのパスを指定してください。
-
+```python
 CALIB_FILE = "calibration_images/xxxx/stereo_calibration_result.npz"
+```
 
 ## 注意
 キャリブレーション後はカメラ位置を動かさないでください
