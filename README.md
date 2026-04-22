@@ -5,10 +5,11 @@
 緑色マーカーの3次元位置を計測するプログラムです。
 
 キャリブレーション画像を取得し、カメラの内部・外部パラメータを推定した後、  
-緑色マーカーの位置を各カメラ画像から検出し、三角測量によって3次元座標を求めます。
-  
+緑色マーカーの位置を各カメラ画像から検出し、三角測量によって3次元座標を求めます。　　
+
 This project performs stereo camera calibration using two cameras  
 and computes the 3D position of a green marker via triangulation.
+
 ---
 
 ## 必要環境 / Requirements
