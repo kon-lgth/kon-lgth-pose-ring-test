@@ -63,6 +63,7 @@ CALIB_FILE = "calibration_images/xxxx/stereo_calibration_result.npz"
 照明環境によって色検出の精度が変わります
 
 ## フォルダ構成
+
 PoseRingTest/
 ├─ capture_calibration_pairs.py
 ├─ stereo_calibrate_from_saved_pairs.py
