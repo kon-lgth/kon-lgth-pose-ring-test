@@ -1,0 +1,34 @@
+=== Auto selection report ===
+SESSION_DIR=calibration_images\calib_20260422_021823
+Candidates=22
+Selected=18
+
+[Selected]
+00: pair_016_cam0.png | score=0.6480 | sharp=(93.4,638.3) | area=(0.099,0.089) | center=(0.216,0.499) | tilt=(43.1,21.3) | balance=0.107
+01: pair_024_cam0.png | score=0.4985 | sharp=(191.4,865.6) | area=(0.106,0.066) | center=(0.533,0.420) | tilt=(4.5,0.4) | balance=0.472
+02: pair_015_cam0.png | score=0.5734 | sharp=(130.7,739.4) | area=(0.143,0.079) | center=(0.077,0.530) | tilt=(36.9,52.0) | balance=0.581
+03: pair_028_cam0.png | score=0.4969 | sharp=(132.7,779.2) | area=(0.074,0.072) | center=(0.605,0.354) | tilt=(0.0,0.6) | balance=0.033
+04: pair_011_cam0.png | score=0.5645 | sharp=(150.8,830.5) | area=(0.090,0.070) | center=(0.327,0.555) | tilt=(6.4,8.2) | balance=0.255
+05: pair_017_cam0.png | score=0.5972 | sharp=(78.1,681.0) | area=(0.094,0.073) | center=(0.224,0.474) | tilt=(26.3,14.7) | balance=0.250
+06: pair_022_cam0.png | score=0.5156 | sharp=(102.1,696.2) | area=(0.102,0.090) | center=(0.529,0.569) | tilt=(9.0,11.5) | balance=0.133
+07: pair_004_cam0.png | score=0.3668 | sharp=(124.9,720.4) | area=(0.105,0.059) | center=(0.273,0.603) | tilt=(5.1,7.3) | balance=0.567
+08: pair_018_cam0.png | score=0.5026 | sharp=(136.7,736.7) | area=(0.076,0.066) | center=(0.544,0.224) | tilt=(2.2,3.6) | balance=0.145
+09: pair_020_cam0.png | score=0.4628 | sharp=(110.0,694.4) | area=(0.076,0.066) | center=(0.597,0.328) | tilt=(9.3,9.4) | balance=0.139
+10: pair_027_cam0.png | score=0.4918 | sharp=(114.4,740.4) | area=(0.068,0.073) | center=(0.584,0.273) | tilt=(1.7,5.5) | balance=0.076
+11: pair_000_cam0.png | score=0.2994 | sharp=(84.9,547.6) | area=(0.072,0.052) | center=(0.396,0.237) | tilt=(4.7,2.6) | balance=0.322
+12: pair_026_cam0.png | score=0.4348 | sharp=(95.1,748.4) | area=(0.063,0.078) | center=(0.612,0.273) | tilt=(3.3,6.0) | balance=0.211
+13: pair_029_cam0.png | score=0.3241 | sharp=(85.3,653.6) | area=(0.081,0.054) | center=(0.165,0.542) | tilt=(2.0,3.5) | balance=0.414
+14: pair_013_cam0.png | score=0.3227 | sharp=(101.2,621.6) | area=(0.105,0.060) | center=(0.437,0.508) | tilt=(9.4,15.2) | balance=0.552
+15: pair_001_cam0.png | score=0.4089 | sharp=(140.8,762.8) | area=(0.086,0.056) | center=(0.472,0.361) | tilt=(3.2,4.6) | balance=0.420
+16: pair_007_cam0.png | score=0.3862 | sharp=(127.0,670.2) | area=(0.094,0.059) | center=(0.484,0.415) | tilt=(13.9,8.9) | balance=0.461
+17: pair_021_cam0.png | score=0.2872 | sharp=(72.2,499.1) | area=(0.088,0.067) | center=(0.582,0.394) | tilt=(8.9,12.7) | balance=0.281
+
+[Rejected in pre-filter]
+pair_002_cam0.png: left_right_size_mismatch
+pair_003_cam0.png: left_right_size_mismatch
+pair_005_cam0.png: left_right_size_mismatch
+pair_006_cam0.png: left_right_size_mismatch
+pair_008_cam0.png: left_right_size_mismatch
+pair_009_cam0.png: left_right_size_mismatch
+pair_010_cam0.png: left_right_size_mismatch
+pair_014_cam0.png: left_right_size_mismatch
