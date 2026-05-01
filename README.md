@@ -93,3 +93,28 @@ PoseRingTest/
 ├─ calibration_images/
 └─ archive/
 ```
+
+## 現在の進捗(5/1)：黄色マーカーの3D座標判定とXIAO LEDのBLE制御
+
+現在、XIAO nRF52840 SenseをBLEデバイスとして動作させ、PC側のPythonプログラムからBLE通信でLED点灯・消灯命令を送信できるようにした。
+
+### 成功した動作
+
+1. 2台カメラで黄色マーカーを検出
+2. ステレオキャリブレーション結果を用いて黄色マーカーの3D座標を計算
+3. Enterキーで現在の黄色位置を原点に設定
+4. sキーで現在の黄色位置をゴール座標として保存
+5. 黄色マーカーがゴール範囲内に入ると、PCからXIAOへBLEで信号を送信
+6. XIAO nRF52840 Senseの内蔵LEDが点灯
+7. 黄色マーカーがゴール範囲外に出るとLEDが消灯
+
+### 使用ファイル
+
+- `yellow_3d_ble_led_test.py`
+
+### 必要なPythonライブラリ
+
+```bash
+pip install opencv-python numpy bleak
+
+
