@@ -58,7 +58,6 @@ Do not save while the board is moving
 Save only when the board has been stationary for a certain period of time  
 
 
-Translated with DeepL.com (free version)
 
 ② ステレオキャリブレーション / Stereo calibration
 ```bash
