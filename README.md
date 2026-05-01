@@ -98,6 +98,23 @@ Determines whether each color is within a certain distance from the target posit
 Displays “CLEAR” when all four colors remain within the target range for a certain period of time  
 If a color is lost, the last detected 3D coordinates are used  
 
+④ 黄色マーカーのBLE LEDフィードバック / Yellow marker BLE LED feedback 
+```bash
+yellow_3d_ble_led_test.py
+```
+このプログラムでは、黄色マーカーのみを検出し、
+黄色が設定したゴール位置に入ったとき、PCからBLE通信でXIAO nRF52840 Senseへ信号を送り、内蔵LEDを点灯させます。
+現在、この黄色のみのBluetooth版は動作確認済みです。  
+
+注意：XIAO側には、BLEデバイス名 PoseRing_YELLOW として動作するArduinoプログラムを書き込んでおく必要があります。  
+
+In this program, only yellow markers are detected,
+and when the yellow marker enters the designated goal position, a signal is sent from the PC to the XIAO nRF52840 Sense via BLE, causing the built-in LED to light up.
+Currently, this Bluetooth version that detects only yellow has been verified to work.  
+
+Note: You must upload an Arduino program to the XIAO so that it operates with the BLE device name “PoseRing_YELLOW”.  
+
+
 
 ## 事前に変更が必要な箇所 / Parameters to Modify
 カメラインデックス / Camera indices
@@ -145,27 +162,17 @@ PoseRingTest/
 └─ archive/
 ```
 
-## 現在の進捗(5/1)：黄色マーカーの3D座標判定とXIAO LEDのBLE制御
-
-現在、XIAO nRF52840 SenseをBLEデバイスとして動作させ、PC側のPythonプログラムからBLE通信でLED点灯・消灯命令を送信できるようにした。
-
-### 成功した動作
-
-1. 2台カメラで黄色マーカーを検出
-2. ステレオキャリブレーション結果を用いて黄色マーカーの3D座標を計算
-3. Enterキーで現在の黄色位置を原点に設定
-4. sキーで現在の黄色位置をゴール座標として保存
-5. 黄色マーカーがゴール範囲内に入ると、PCからXIAOへBLEで信号を送信
-6. XIAO nRF52840 Senseの内蔵LEDが点灯
-7. 黄色マーカーがゴール範囲外に出るとLEDが消灯
-
-### 使用ファイル
-
-- `yellow_3d_ble_led_test.py`
-
-### 必要なPythonライブラリ
-
-```bash
-pip install opencv-python numpy bleak
+## 現在の進捗 / Current Progress
+2026/05/01
+キャリブレーション画像取得プログラムを改善
+・動いている間は保存せず、静止してから保存  
+赤・黄・青・緑を検出
+・sキーで4色の現在座標を同時に目標として保存
+・4色すべてが目標範囲内に入るとCLEAR
+・色を見失った場合は最後に検出した座標を使用
+黄色マーカーのみのBLE LEDフィードバックに成功
+・黄色がゴール範囲内に入ると、PCからXIAO nRF52840 SenseへBLE送信
+・XIAOの内蔵LEDが点灯
+・黄色がゴール範囲外に出るとLED消灯
 
 
