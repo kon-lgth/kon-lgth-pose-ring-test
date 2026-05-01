@@ -50,7 +50,6 @@ capture_calibration_pairs.py は、以下の改善を含む版です。
 両カメラでチェッカーボードが検出できた場合のみ保存    
 ボードが動いている間は保存しない  
 一定時間静止したときのみ保存  
-表示のみ左右反転し、保存画像は反転していない生画像を使用  
 
 The `capture_calibration_pairs.py` script has been updated to include the following improvements:  
 
