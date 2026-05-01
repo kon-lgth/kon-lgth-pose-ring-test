@@ -4,11 +4,15 @@
 2台のカメラを用いてステレオキャリブレーションを行い、  
 緑色マーカーの3次元位置を計測するプログラムです。
 
-キャリブレーション画像を取得し、カメラの内部・外部パラメータを推定した後、  
-緑色マーカーの位置を各カメラ画像から検出し、三角測量によって3次元座標を求めます。　　
+現在は、赤・黄・青・緑の4色マーカーの3D座標検出と、  
+黄色マーカーのみを対象としたXIAO nRF52840 SenseへのBLE LEDフィードバックの動作確認まで成功しています。  
 
 This project performs stereo camera calibration using two cameras  
-and computes the 3D position of a green marker via triangulation.
+and computes the 3D positions of colored markers via triangulation.
+
+Currently, the project supports 3D detection of red, yellow, blue, and green markers,  
+and a BLE LED feedback test using XIAO nRF52840 Sense for the yellow marker.
+
 
 ---
 
@@ -16,6 +20,7 @@ and computes the 3D position of a green marker via triangulation.
 - Windows（動作確認済み / Verified）
 - Python 3.10 +
 - USB cameras × 2
+- XIAO nRF52840 Sense（BLE LEDフィードバックを使う場合）
 ---
 
 ## 必要ライブラリ / Required Libraries
@@ -26,13 +31,38 @@ Install the following packages:
 pip install opencv-python numpy
 ```
 
+BLE通信を使う場合は、以下もインストールしてください。  
+If you plan to use BLE communication, please install the following as well.
+```bash
+pip install bleak
+```
+
 ## 実行手順 / How to Run
 ① キャリブレーション画像の取得 / Capture calibration image pairs
 ```bash
 capture_calibration_pairs.py
 ```
 → calibration_images フォルダに画像が保存されます  
-→ Calibration image pairs will be saved in the calibration_images folder.
+→ Calibration image pairs will be saved in the calibration_images folder.  
+
+capture_calibration_pairs.py は、以下の改善を含む版です。  
+
+両カメラでチェッカーボードが検出できた場合のみ保存  
+前回保存した姿勢と似すぎる場合は保存しない  
+ボードが動いている間は保存しない  
+一定時間静止したときのみ保存  
+表示のみ左右反転し、保存画像は反転していない生画像を使用  
+
+The `capture_calibration_pairs.py` script has been updated to include the following improvements:  
+
+Save only when checkerboards are detected by both cameras  
+Do not save if the pose is too similar to the last saved one  
+Do not save while the board is moving  
+Save only when the board has been stationary for a certain period of time  
+Flip the display horizontally, but use the unflipped raw image for saving
+
+
+Translated with DeepL.com (free version)
 
 ② ステレオキャリブレーション / Stereo calibration
 ```bash
@@ -43,10 +73,31 @@ stereo_calibrate_from_saved_pairs.py
 
 ③ 3D計測 / 3D measurement
 ```bash
-green_3d_from_calibration.py
+four_color_3d_target_game.py
 ```
-→ 緑色マーカーの3次元座標が計算されます  
-→ Computes the 3D coordinates of the green marker.
+→ 各色の3次元座標が計算されます  
+→ Computes the 3D coordinates of the each marker.  
+
+主な機能は以下です。  
+
+赤・黄・青・緑の4色を同時に検出  
+ステレオキャリブレーション結果を用いて各色の3D座標を計算  
+Enterキーで現在の赤マーカー位置を原点に設定  
+sキーで現在の4色の3D座標を目標位置として保存  
+各色が目標位置から一定距離以内にあるかを判定  
+4色すべてが目標範囲内に一定時間入るとCLEAR表示  
+色を見失った場合は、最後に検出した3D座標を使用  
+
+The main features are as follows:  
+
+Simultaneously detects four colors: red, yellow, blue, and green  
+Calculates the 3D coordinates for each color using stereo calibration results  
+Press the Enter key to set the current red marker position as the origin  
+Press the S key to save the current 3D coordinates of the four colors as the target position  
+Determines whether each color is within a certain distance from the target position  
+Displays “CLEAR” when all four colors remain within the target range for a certain period of time  
+If a color is lost, the last detected 3D coordinates are used  
+
 
 ## 事前に変更が必要な箇所 / Parameters to Modify
 カメラインデックス / Camera indices
