@@ -37,6 +37,23 @@ If you plan to use BLE communication, please install the following as well.
 pip install bleak
 ```
 
+## XIAO nRF52840 Sense 側のBLE LED受信プログラム
+
+`four_color_3d_target_game_ble_yellow_only.py` を使う場合、XIAO nRF52840 Senseには事前に `xiao_ble_led_receiver.ino` を書き込んでおく必要があります。  
+
+このスケッチでは、XIAOを `PoseRing_YELLOW` という名前のBLEデバイスとして動作させます。PC側PythonからBLEで `1` を受信すると内蔵LEDを点灯し、`0` を受信すると消灯します。  
+
+XIAO nRF52840 Senseの内蔵LEDは `LOW` で点灯、`HIGH` で消灯します。  
+
+
+When using `four_color_3d_target_game_ble_yellow_only.py`, you must first upload `xiao_ble_led_receiver.ino` to the XIAO nRF52840 Sense.   
+
+In this sketch, the XIAO operates as a BLE device named `PoseRing_YELLOW`. When Python on the PC receives a `1` via BLE, the built-in LED turns on; when it receives a `0`, the LED turns off.  
+
+The built-in LED on the XIAO nRF52840 Sense turns on when set to `LOW` and turns off when set to `HIGH`.  
+
+
+
 ## 実行手順 / How to Run
 ① キャリブレーション画像の取得 / Capture calibration image pairs
 ```bash
