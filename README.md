@@ -54,10 +54,8 @@ capture_calibration_pairs.py は、以下の改善を含む版です。
 The `capture_calibration_pairs.py` script has been updated to include the following improvements:  
 
 Save only when checkerboards are detected by both cameras  
-Do not save if the pose is too similar to the last saved one  
 Do not save while the board is moving  
 Save only when the board has been stationary for a certain period of time  
-Flip the display horizontally, but use the unflipped raw image for saving
 
 
 Translated with DeepL.com (free version)
