@@ -168,6 +168,9 @@ PoseRingTest/
 ├─ capture_calibration_pairs.py
 ├─ stereo_calibrate_from_saved_pairs.py
 ├─ green_3d_from_calibration.py
+├─ four_color_3d_target_game.py
+├─ yellow_3d_ble_led_test.py
+├─ xiao_ble_led_receiver.ino
 ├─ camera_check_2cam.py
 ├─ camera_index_check.py
 ├─ calibration_images/
