@@ -189,5 +189,35 @@ PoseRingTest/
 ・黄色がゴール範囲内に入ると、PCからXIAO nRF52840 SenseへBLE送信  
 ・XIAOの内蔵LEDが点灯  
 ・黄色がゴール範囲外に出るとLED消灯  
+  
+  
+2026/05/04  
+4台カメラ版の実装 / Four-camera version  
+2台カメラによるステレオ計測を2セット用意し、合計4台のカメラを使用する版を実装しました。  
+- Aセット：通常使用するメインのステレオカメラ  
+- Bセット：Aセットでマーカーが見えない場合に補助するステレオカメラ
+```bash
+four_camera_3d_target_game.py
+```
+AセットとBセットは別々にステレオキャリブレーションを行っています。  
+そのため、A/Bの3D座標系は直接混ぜず、以下のルールで判定しています。  
+  
+1. Aセットで検出できている場合  
+   → Aセットの現在座標とAセットの目標座標を比較  
+  
+2. Aセットで検出できず、Bセットで検出できている場合  
+   → Bセットの現在座標とBセットの目標座標を比較  
+  
+3. AセットでもBセットでも検出できない場合  
+   → 最後に使用した座標を短時間だけ使用  
+  
+This project now supports a four-camera version using two stereo camera sets.  
+
+Set A: main stereo camera pair  
+Set B: backup stereo camera pair used when markers are lost in Set A  
+
+The coordinate systems of Set A and Set B are not directly mixed.  
+Each marker is judged using either Set A coordinates or Set B coordinates depending on visibility.  
+  
 
 
