@@ -196,9 +196,7 @@ PoseRingTest/
 ・黄色がゴール範囲内に入ると、PCからXIAO nRF52840 SenseへBLE送信  
 ・XIAOの内蔵LEDが点灯  
 ・黄色がゴール範囲外に出るとLED消灯  
-  
-  
-  
+      
 **2026/05/04**  
   
 **4台カメラ版の実装 / Four-camera version**  
