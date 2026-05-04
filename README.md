@@ -39,94 +39,100 @@ pip install bleak
 
 ## XIAO nRF52840 Sense 側のBLE LED受信プログラム
 
-`four_color_3d_target_game_ble_yellow_only.py` を使う場合、XIAO nRF52840 Senseには事前に `xiao_ble_led_receiver.ino` を書き込んでおく必要があります。  
+`four_color_3d_target_game_ble_yellow_only.py` を使う場合、XIAO nRF52840 Senseには  
+事前に `xiao_ble_led_receiver.ino` を書き込んでおく必要があります。  
 
-このスケッチでは、XIAOを `PoseRing_YELLOW` という名前のBLEデバイスとして動作させます。PC側PythonからBLEで `1` を受信すると内蔵LEDを点灯し、`0` を受信すると消灯します。  
+このスケッチでは、XIAOを `PoseRing_YELLOW` という名前のBLEデバイスとして動作させます。  
+PC側PythonからBLEで `1` を受信すると内蔵LEDを点灯し、`0` を受信すると消灯します。  
 
 XIAO nRF52840 Senseの内蔵LEDは `LOW` で点灯、`HIGH` で消灯します。  
+  
+  
+When using `four_color_3d_target_game_ble_yellow_only.py`,   
+you must first upload `xiao_ble_led_receiver.ino` to the XIAO nRF52840 Sense.   
 
-
-When using `four_color_3d_target_game_ble_yellow_only.py`, you must first upload `xiao_ble_led_receiver.ino` to the XIAO nRF52840 Sense.   
-
-In this sketch, the XIAO operates as a BLE device named `PoseRing_YELLOW`. When Python on the PC receives a `1` via BLE, the built-in LED turns on; when it receives a `0`, the LED turns off.  
+In this sketch, the XIAO operates as a BLE device named `PoseRing_YELLOW`.  
+When Python on the PC receives a `1` via BLE, the built-in LED turns on; when it receives a `0`, the LED turns off.  
 
 The built-in LED on the XIAO nRF52840 Sense turns on when set to `LOW` and turns off when set to `HIGH`.  
 
 
 
 ## 実行手順 / How to Run
-① キャリブレーション画像の取得 / Capture calibration image pairs
+### ① キャリブレーション画像の取得 / Capture calibration image pairs
 ```bash
 capture_calibration_pairs.py
 ```
 → calibration_images フォルダに画像が保存されます  
 → Calibration image pairs will be saved in the calibration_images folder.  
+  
+**capture_calibration_pairs.py は、以下の改善を含む版です。**  
 
-capture_calibration_pairs.py は、以下の改善を含む版です。  
-
-両カメラでチェッカーボードが検出できた場合のみ保存    
-ボードが動いている間は保存しない  
-一定時間静止したときのみ保存  
-
-The `capture_calibration_pairs.py` script has been updated to include the following improvements:  
+・両カメラでチェッカーボードが検出できた場合のみ保存    
+・ボードが動いている間は保存しない  
+・一定時間静止したときのみ保存  
+  
+**The `capture_calibration_pairs.py` script has been updated to include the following improvements:** 
 
 Save only when checkerboards are detected by both cameras  
 Do not save while the board is moving  
 Save only when the board has been stationary for a certain period of time  
 
+  
 
-
-② ステレオキャリブレーション / Stereo calibration
+### ② ステレオキャリブレーション / Stereo calibration
 ```bash
 stereo_calibrate_from_saved_pairs.py
 ```
 → キャリブレーション結果（.npz ファイル）が生成されます  
 → A .npz calibration file will be generated.
 
-③ 3D計測 / 3D measurement
+### ③ 3D計測 / 3D measurement
 ```bash
 four_color_3d_target_game.py
 ```
 → 各色の3次元座標が計算されます  
 → Computes the 3D coordinates of the each marker.  
 
-主な機能は以下です。  
+**主な機能は以下です。**  
 
-赤・黄・青・緑の4色を同時に検出  
-ステレオキャリブレーション結果を用いて各色の3D座標を計算  
-Enterキーで現在の赤マーカー位置を原点に設定  
-sキーで現在の4色の3D座標を目標位置として保存  
-各色が目標位置から一定距離以内にあるかを判定  
-4色すべてが目標範囲内に一定時間入るとCLEAR表示  
-色を見失った場合は、最後に検出した3D座標を使用  
+・赤、黄、青、緑の4色を同時に検出  
+・ステレオキャリブレーション結果を用いて各色の3D座標を計算  
+・Enterキーで現在の赤マーカー位置を原点に設定  
+・sキーで現在の4色の3D座標を目標位置として保存  
+・各色が目標位置から一定距離以内にあるかを判定  
+・4色すべてが目標範囲内に一定時間入るとCLEAR表示  
+・色を見失った場合は、最後に検出した3D座標を使用  
+  
+**The main features are as follows:**  
 
-The main features are as follows:  
+・Simultaneously detects four colors: red, yellow, blue, and green  
+・Calculates the 3D coordinates for each color using stereo calibration results  
+・Press the Enter key to set the current red marker position as the origin  
+・Press the S key to save the current 3D coordinates of the four colors as the target position  
+・Determines whether each color is within a certain distance from the target position  
+・Displays “CLEAR” when all four colors remain within the target range for a certain period of time  
+・If a color is lost, the last detected 3D coordinates are used  
 
-Simultaneously detects four colors: red, yellow, blue, and green  
-Calculates the 3D coordinates for each color using stereo calibration results  
-Press the Enter key to set the current red marker position as the origin  
-Press the S key to save the current 3D coordinates of the four colors as the target position  
-Determines whether each color is within a certain distance from the target position  
-Displays “CLEAR” when all four colors remain within the target range for a certain period of time  
-If a color is lost, the last detected 3D coordinates are used  
-
-④ 黄色マーカーのBLE LEDフィードバック / Yellow marker BLE LED feedback 
+### ④ 黄色マーカーのBLE LEDフィードバック / Yellow marker BLE LED feedback 
 ```bash
 yellow_3d_ble_led_test.py
 ```
-このプログラムでは、黄色マーカーのみを検出し、
-黄色が設定したゴール位置に入ったとき、PCからBLE通信でXIAO nRF52840 Senseへ信号を送り、内蔵LEDを点灯させます。
+このプログラムでは、黄色マーカーのみを検出し、  
+黄色が設定したゴール位置に入ったとき、PCからBLE通信でXIAO nRF52840 Senseへ信号を送り、  
+内蔵LEDを点灯させます。
 現在、この黄色のみのBluetooth版は動作確認済みです。  
 
-注意：XIAO側には、BLEデバイス名 PoseRing_YELLOW として動作するArduinoプログラムを書き込んでおく必要があります。  
-
-In this program, only yellow markers are detected,
-and when the yellow marker enters the designated goal position, a signal is sent from the PC to the XIAO nRF52840 Sense via BLE, causing the built-in LED to light up.
+**注意：XIAO側には、BLEデバイス名 PoseRing_YELLOW として動作するArduinoプログラムを書き込んでおく必要があります。**  
+  
+In this program, only yellow markers are detected,  
+and when the yellow marker enters the designated goal position,   
+a signal is sent from the PC to the XIAO nRF52840 Sense via BLE, causing the built-in LED to light up.  
 Currently, this Bluetooth version that detects only yellow has been verified to work.  
 
 Note: You must upload an Arduino program to the XIAO so that it operates with the BLE device name “PoseRing_YELLOW”.  
 
-
+  
 
 ## 事前に変更が必要な箇所 / Parameters to Modify
 カメラインデックス / Camera indices
@@ -178,21 +184,25 @@ PoseRingTest/
 ```
 
 ## 現在の進捗 / Current Progress
-2026/05/01  
-キャリブレーション画像取得プログラムを改善  
-・動いている間は保存せず、静止してから保存  
-赤・黄・青・緑を検出  
+**2026/05/01**  
+  
+1.プログラムを改善  
+・キャリブレーションの際、動いている間は保存せず、静止してから保存  
 ・sキーで4色の現在座標を同時に目標として保存  
 ・4色すべてが目標範囲内に入るとCLEAR  
 ・色を見失った場合は最後に検出した座標を使用  
-黄色マーカーのみのBLE LEDフィードバックに成功  
+　　
+2.黄色マーカーのみのBLE LEDフィードバックに成功  
 ・黄色がゴール範囲内に入ると、PCからXIAO nRF52840 SenseへBLE送信  
 ・XIAOの内蔵LEDが点灯  
 ・黄色がゴール範囲外に出るとLED消灯  
   
   
-2026/05/04  
-4台カメラ版の実装 / Four-camera version  
+  
+**2026/05/04**  
+  
+**4台カメラ版の実装 / Four-camera version**  
+  
 2台カメラによるステレオ計測を2セット用意し、合計4台のカメラを使用する版を実装しました。  
 - Aセット：通常使用するメインのステレオカメラ  
 - Bセット：Aセットでマーカーが見えない場合に補助するステレオカメラ
