@@ -3,10 +3,17 @@ import numpy as np
 import os
 import glob
 
+from calib_utils import resolve_session_dir
+
 # =========================
 # Bセット用 設定
 # =========================
-SESSION_DIR = r"calibration_images\calib_B_20260504_140722"
+# Leave SESSION_DIR empty to auto-use the latest calib_B_* folder,
+# or set it manually to override, e.g.:
+#   SESSION_DIR = "calibration_images/calib_B_20260506_161557"
+SESSION_DIR = ""
+
+SESSION_DIR = resolve_session_dir(SESSION_DIR, prefix="calib_B_")
 CAM0_DIR = os.path.join(SESSION_DIR, "cam0")
 CAM1_DIR = os.path.join(SESSION_DIR, "cam1")
 

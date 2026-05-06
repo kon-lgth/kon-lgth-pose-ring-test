@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import time
 
+from calib_utils import resolve_npz
+
 # ============================================================
 # PoseRing 4 Camera / 2 Stereo Sets Target Game
 #
@@ -14,11 +16,20 @@ import time
 # =========================
 # 設定
 # =========================
-# Aセット用キャリブレーション結果
-# ※ Aセットを再キャリブレーションした場合はここを書き換える
-A_CALIB_FILE = r"calibration_images\calib_A_20260504_143905\stereo_calibration_result.npz"
-# Bセット用キャリブレーション結果
-B_CALIB_FILE = r"calibration_images\calib_B_20260504_140722\stereo_calibration_result.npz"
+# Leave empty to auto-use the latest session of each type.
+# Set manually to override, e.g.:
+#   A_CALIB_FILE = "calibration_images/calib_A_20260506_123456/stereo_calibration_result.npz"
+#   B_CALIB_FILE = "calibration_images/calib_B_20260506_161557/stereo_calibration_result.npz"
+A_CALIB_FILE = ""
+B_CALIB_FILE = ""
+
+# Auto-discovery: A-set = latest calib_A_* (falls back to any calib_* if none)
+try:
+    A_CALIB_FILE = resolve_npz(A_CALIB_FILE, prefix="calib_A_")
+except FileNotFoundError:
+    A_CALIB_FILE = resolve_npz(A_CALIB_FILE, prefix="calib_")
+
+B_CALIB_FILE = resolve_npz(B_CALIB_FILE, prefix="calib_B_")
 
 A_CAM0_INDEX = 2
 A_CAM1_INDEX = 3

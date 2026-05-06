@@ -6,10 +6,10 @@ import time
 # =========================
 # Bセット用 設定
 # =========================
-# 今回検出されたカメラ番号 [1, 2, 4, 5] のうち、
-# まずBセットとして Index 4 と Index 5 を使う
-CAM0_INDEX = 4
-CAM1_INDEX = 5
+# Run scan_cameras.py first to find the correct indices for your machine.
+# OBS Virtual Camera must be ON (OBS → Tools → Start Virtual Camera).
+CAM0_INDEX = 0    # ← usb1  (change if scan_cameras.py shows different index)
+CAM1_INDEX = 1    # ← usb2  (change if scan_cameras.py shows different index)
 
 PATTERN_SIZE = (9, 6)           # チェッカーボード内側の交点数
 START_DELAY_SEC = 10            # 何秒後に自動撮影を始めるか
@@ -18,8 +18,9 @@ TARGET_PAIRS = 30               # 保存したいペア数
 MIN_CORNER_SHIFT = 18.0         # 前回と似すぎる姿勢を避けるためのしきい値
 WINDOW_NAME = "Stereo Calibration Capture B"
 
-# WindowsではDirectShowの方が安定することが多い
-USE_DSHOW = True
+# CAP_DSHOW is Windows-only; on macOS/Linux we use the default backend.
+import sys as _sys
+USE_DSHOW = _sys.platform == "win32"
 
 # =========================
 # 保存先作成

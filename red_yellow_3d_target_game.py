@@ -2,10 +2,17 @@ import cv2
 import numpy as np
 import time
 
+from calib_utils import resolve_npz
+
 # =========================
 # 設定
 # =========================
-CALIB_FILE = r"calibration_images\calib_20260429_120604\stereo_calibration_result.npz"
+# Leave CALIB_FILE empty to auto-use the latest calibration session,
+# or set it manually to override, e.g.:
+#   CALIB_FILE = "calibration_images/calib_B_20260506_161557/stereo_calibration_result.npz"
+CALIB_FILE = ""
+
+CALIB_FILE = resolve_npz(CALIB_FILE, prefix="calib_")
 
 CAM0_INDEX = 2
 CAM1_INDEX = 3
