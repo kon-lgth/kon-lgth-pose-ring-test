@@ -281,6 +281,14 @@ for cap in [cap0, cap1]:
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+# macOS AVFoundation needs several frames to warm up after re-opening.
+# Discard black warmup frames so the main loop starts with real video.
+print("カメラウォームアップ中 (黒フレームを読み飛ばし)...")
+for _w in range(60):
+    cap0.read()
+    cap1.read()
+print("カメラ準備完了")
+
 
 print("======================================")
 print("Four Color 3D Target Game を開始")

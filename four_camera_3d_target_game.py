@@ -200,8 +200,8 @@ def open_camera(index, backend_mode):
         cap.set(cv2.CAP_PROP_FPS, FPS)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-    # ウォームアップ
-    for _ in range(10):
+    # ウォームアップ: macOS AVFoundation は最初の数十フレームが黒いため読み飛ばす
+    for _ in range(60):
         cap.read()
 
     return cap

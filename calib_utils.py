@@ -98,10 +98,14 @@ def resolve_session_dir(override: str, prefix: str = "calib_B_") -> str:
     return find_latest_session_dir(prefix)
 
 
-def find_cameras(n: int = 2, max_index: int = 12) -> list:
+def find_cameras(n: int = 2, max_index: int = 12, warmup_frames: int = 30) -> list:
     """
     Scan camera indices 0..max_index-1 and return the first *n* indices
-    that OpenCV can open AND successfully read a frame from.
+    that OpenCV can open AND produce a non-black frame from.
+
+    On macOS/AVFoundation the first frames are always black (warmup period).
+    We read up to *warmup_frames* frames and require at least one with
+    non-zero pixels before accepting a camera as working.
 
     Raises RuntimeError if fewer than *n* working cameras are found.
 
@@ -113,23 +117,33 @@ def find_cameras(n: int = 2, max_index: int = 12) -> list:
     import cv2 as _cv2
 
     found = []
-    print(f"[calib_utils] Scanning cameras (need {n}) ...")
+    print(f"[calib_utils] Scanning cameras (need {n}, warmup up to {warmup_frames} frames each) ...")
     for i in range(max_index):
         cap = _cv2.VideoCapture(i)
-        if cap.isOpened():
-            ret, _ = cap.read()
+        if not cap.isOpened():
             cap.release()
-            if ret:
-                print(f"[calib_utils] Camera found at index {i}")
-                found.append(i)
-                if len(found) == n:
-                    break
+            continue
+
+        # Read up to warmup_frames; accept only if we get a non-black frame
+        working = False
+        for _ in range(warmup_frames):
+            ret, frame = cap.read()
+            if ret and frame is not None and frame.max() > 0:
+                working = True
+                break
+        cap.release()
+
+        if working:
+            print(f"[calib_utils] Camera found at index {i}")
+            found.append(i)
+            if len(found) == n:
+                break
         else:
-            cap.release()
+            print(f"[calib_utils] Index {i}: opened but no non-black frame in {warmup_frames} reads — skipped")
 
     if len(found) < n:
         raise RuntimeError(
-            f"[calib_utils] Only {len(found)} camera(s) found (need {n}).\n"
+            f"[calib_utils] Only {len(found)} working camera(s) found (need {n}).\n"
             "Run scan_cameras.py to diagnose.\n"
             "Check USB connections, Camera permissions, and OBS Virtual Camera."
         )
