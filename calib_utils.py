@@ -96,3 +96,41 @@ def resolve_session_dir(override: str, prefix: str = "calib_B_") -> str:
         print(f"[calib_utils] Using manually specified session dir: {override}")
         return override
     return find_latest_session_dir(prefix)
+
+
+def find_cameras(n: int = 2, max_index: int = 12) -> list:
+    """
+    Scan camera indices 0..max_index-1 and return the first *n* indices
+    that OpenCV can open AND successfully read a frame from.
+
+    Raises RuntimeError if fewer than *n* working cameras are found.
+
+    Example
+    -------
+    cam0, cam1 = find_cameras(2)
+    a0, a1, b0, b1 = find_cameras(4)
+    """
+    import cv2 as _cv2
+
+    found = []
+    print(f"[calib_utils] Scanning cameras (need {n}) ...")
+    for i in range(max_index):
+        cap = _cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            cap.release()
+            if ret:
+                print(f"[calib_utils] Camera found at index {i}")
+                found.append(i)
+                if len(found) == n:
+                    break
+        else:
+            cap.release()
+
+    if len(found) < n:
+        raise RuntimeError(
+            f"[calib_utils] Only {len(found)} camera(s) found (need {n}).\n"
+            "Run scan_cameras.py to diagnose.\n"
+            "Check USB connections, Camera permissions, and OBS Virtual Camera."
+        )
+    return found

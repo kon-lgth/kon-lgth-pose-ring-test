@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import time
 
-from calib_utils import resolve_npz
+from calib_utils import resolve_npz, find_cameras
 
 # =========================
 # 設定
@@ -14,8 +14,11 @@ CALIB_FILE = ""
 
 CALIB_FILE = resolve_npz(CALIB_FILE, prefix="calib_")
 
-CAM0_INDEX = 2
-CAM1_INDEX = 3
+# Leave empty to auto-detect the first two available cameras at startup,
+# or override manually: CAM0_INDEX = 0 / CAM1_INDEX = 1
+_cam_indices = find_cameras(2)
+CAM0_INDEX = _cam_indices[0]
+CAM1_INDEX = _cam_indices[1]
 
 DISPLAY_MIRROR = True
 SHOW_MASK = False
