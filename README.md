@@ -5,13 +5,13 @@
 マーカーの3次元位置を計測するプログラムです。
 
 現在は、赤・黄・青・緑の4色マーカーの3D座標検出と、  
-黄色マーカーのみを対象としたXIAO nRF52840 SenseへのBLE LEDフィードバックの動作確認まで成功しています。  
+赤色マーカーのみを対象としたXIAO nRF52840 SenseへのLEDフィードバックの動作確認まで成功しています。  
 
 This project performs stereo camera calibration using two cameras  
 and computes the 3D positions of colored markers via triangulation.
 
 Currently, the project supports 3D detection of red, yellow, blue, and green markers,  
-and a BLE LED feedback test using XIAO nRF52840 Sense for the yellow marker.
+and a BLE LED feedback test using XIAO nRF52840 Sense for the red marker.
 
 
 ---
@@ -21,6 +21,8 @@ and a BLE LED feedback test using XIAO nRF52840 Sense for the yellow marker.
 - Python 3.10 +
 - USB cameras × 2
 - XIAO nRF52840 Sense（BLE LEDフィードバックを使う場合）
+- NeoPixel LED Ring（リング用）
+- DFPlayer Mini（リングのゴール音用）
 ---
 
 ## 必要ライブラリ / Required Libraries
@@ -39,22 +41,33 @@ pip install bleak
 
 ## XIAO nRF52840 Sense 側のBLE LED受信プログラム
 
-`four_color_3d_target_game_ble_yellow_only.py` を使う場合、XIAO nRF52840 Senseには  
-事前に `xiao_ble_led_receiver.ino` を書き込んでおく必要があります。  
+`redlight_ring.py` を使う場合、XIAO nRF52840 Senseには  
+事前に `RED_blightness_D.ino` を書き込んでおく必要があります。  
 
 このスケッチでは、XIAOを `PoseRing_YELLOW` という名前のBLEデバイスとして動作させます。  
-PC側PythonからBLEで `1` を受信すると内蔵LEDを点灯し、`0` を受信すると消灯します。  
-
-XIAO nRF52840 Senseの内蔵LEDは `LOW` で点灯、`HIGH` で消灯します。  
+BLE 受信値の意味  
   
+0 = 消灯  
+1 = BLE 接続中の白色表示  
+2〜255 = 赤色 LED の輝度  
+250〜255 = ゴール判定内（赤点滅＋3秒で音再生）   
+XIAO nRF52840 Senseの内蔵LEDは `LOW` で点灯、`HIGH` で消灯します。   
   
-When using `four_color_3d_target_game_ble_yellow_only.py`,   
-you must first upload `xiao_ble_led_receiver.ino` to the XIAO nRF52840 Sense.   
+    
+When using redlight_ring.py, you must upload RED_blightness_D.ino to the XIAO nRF52840 Sense beforehand.  
 
-In this sketch, the XIAO operates as a BLE device named `PoseRing_YELLOW`.  
-When Python on the PC receives a `1` via BLE, the built-in LED turns on; when it receives a `0`, the LED turns off.  
+In this sketch, the XIAO operates as a BLE device named PoseRing_YELLOW.  
+The meanings of the BLE values received from the PC are as follows:  
 
-The built-in LED on the XIAO nRF52840 Sense turns on when set to `LOW` and turns off when set to `HIGH`.  
+0 = LED off  
+
+1 = White LED indicating an active BLE connection  
+
+2–255 = Red LED brightness  
+
+250–255 = Treated as “inside the goal area” (red blinking + sound playback after 3 seconds)  
+
+The built‑in LED on the XIAO nRF52840 Sense turns on with LOW and off with HIGH.  
 
 
 
@@ -114,23 +127,22 @@ four_color_3d_target_game.py
 ・Displays “CLEAR” when all four colors remain within the target range for a certain period of time  
 ・If a color is lost, the last detected 3D coordinates are used  
 
-### ④ 黄色マーカーのBLE LEDフィードバック / Yellow marker BLE LED feedback 
+### ④ 赤マーカー LEDリング＋音フィードバック / Red Marker LED Ring + Sound Feedback
 ```bash
-yellow_3d_ble_led_test.py
+redlight_ring.py
 ```
-このプログラムでは、黄色マーカーのみを検出し、  
-黄色が設定したゴール位置に入ったとき、PCからBLE通信でXIAO nRF52840 Senseへ信号を送り、  
-内蔵LEDを点灯させます。
-現在、この黄色のみのBluetooth版は動作確認済みです。  
+このプログラムでは、赤色マーカーを検出し、  
+赤色が設定したゴール位置に入ったとき、PCからBLE通信でXIAO nRF52840 Senseへ信号を送り、  
+リングLEDを点灯させます。
+現在、この赤色のみのBluetooth版は動作確認済みです。  
 
 **注意：XIAO側には、BLEデバイス名 PoseRing_YELLOW として動作するArduinoプログラムを書き込んでおく必要があります。**  
   
-In this program, only yellow markers are detected,  
-and when the yellow marker enters the designated goal position,   
-a signal is sent from the PC to the XIAO nRF52840 Sense via BLE, causing the built-in LED to light up.  
-Currently, this Bluetooth version that detects only yellow has been verified to work.  
-
-Note: You must upload an Arduino program to the XIAO so that it operates with the BLE device name “PoseRing_YELLOW”.  
+In this program, the red marker is detected, and when it enters the designated goal area,  
+the PC sends a BLE signal to the XIAO nRF52840 Sense to activate the LED ring.  
+This Bluetooth-based version for the red marker has been successfully verified.  
+  
+Note: You must upload an Arduino program to the XIAO so that it operates as a BLE device named PoseRing_YELLOW.    
 
   
 
@@ -228,6 +240,61 @@ Set B: backup stereo camera pair used when markers are lost in Set A
 
 The coordinate systems of Set A and Set B are not directly mixed.  
 Each marker is judged using either Set A coordinates or Set B coordinates depending on visibility.  
+
   
+**2026/05/06**
+**赤マーカーのLEDリング・音フィードバック / Red marker LED ring and sound feedback**
+```bash
+redlight_ring.py
+```
+赤マーカーを対象として、現在位置と保存した目標位置との距離を計算し、  
+距離に応じてNeoPixel LEDリングの赤色の強さを変化させます。  
+  
+主な動作は以下です。  
+  
+・BLE接続中はLEDリングが白色に点灯  
+・赤マーカーが目標位置に近づくほど、LEDリングが白から赤へ変化  
+・赤マーカーがゴール判定内に入ると、PC側から最大値255を送信  
+・XIAO側では、250以上の値をゴール判定内として扱い、赤色点滅を開始  
+・ゴール判定内に3秒間入り続けると、DFPlayer Miniから効果音を再生  
+・ゴール判定外に出ると、3秒カウントはリセットされる  
+
+The redlight_ring.py program integrates BLE feedback into the four-camera 3D target game.  
+
+It uses the red marker as the feedback target.  
+The distance between the current red marker position and the saved target position is converted into a BLE value from 2 to 255.  
+The XIAO nRF52840 Sense receives this value and changes the NeoPixel LED ring from white to red as the marker approaches the target.  
+
+Main behavior:  
+   
+- White LED while BLE is connected  
+- Gradual transition from white to red as the red marker approaches the target  
+- Sends 255 when the red marker enters the goal area  
+- The XIAO treats values of 250 or higher as being inside the goal  
+- The LED ring blinks red while the marker remains inside the goal  
+- After staying inside the goal for 3 seconds, a sound effect is played using DFPlayer Mini  
+- If the marker leaves the goal area, the 3-second timer is reset  
+
+**XIAO nRF52840 Sense側のプログラム / Device-side firmware**
+```bash
+RED_blightness_D.ino
+```
+XIAO nRF52840 Senseには、事前に RED_blightness_D.ino を書き込んでおく必要があります。
+
+このArduinoスケッチでは、PC側からBLEで受け取る値を以下のように扱います。
+
+0 = 消灯  
+1 = BLE接続中の白色表示  
+2〜255 = 赤色LEDの輝度  
+250〜255 = ゴール判定内として扱う  
+
+The XIAO nRF52840 Sense must be programmed with RED_blightness_D.ino before running redlight_ring.py.  
+
+The Arduino sketch interprets BLE values as follows:  
+
+0 = LED off  
+1 = white LED while BLE is connected  
+2-255 = red LED brightness  
+250-255 = treated as inside the goal area  
 
 
