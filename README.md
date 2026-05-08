@@ -299,10 +299,10 @@ The Arduino sketch interprets BLE values as follows:
 
   
   
-**2026/05/09**
+**2026/05/09**  
 **Wi-Fi通信で、AセットとBセットを別々のノートPCで処理する2PC構成を実装した。**
 
-### 構成
+#### 構成
 
 - メインPC  
   - Aセットカメラ2台の3D座標を計算  
@@ -313,7 +313,7 @@ The Arduino sketch interprets BLE values as follows:
   - Bセットカメラ2台の3D座標を計算  
   - Wi-Fi / UDPでメインPCへ座標JSONを送信  
 
-### 使用ファイル
+#### 使用ファイル
 
 - `redlight_ring_2pc_main.py`  
   - メインPC側で実行する2PC統合版  
@@ -323,7 +323,7 @@ The Arduino sketch interprets BLE values as follows:
   - サブPC側で実行するBセット送信プログラム  
   - Bセットカメラ処理、3D座標計算、UDP送信を担当  
 
-### 実行順  
+#### 実行順  
 
 1. メインPCとサブPCを同じWi-Fiに接続する  
 2. サブPCで `sub_bset_udp_sender.py` を実行する  
