@@ -300,32 +300,47 @@ The Arduino sketch interprets BLE values as follows:
   
   
 **2026/05/09**  
-**Wi-Fi通信で、AセットとBセットを別々のノートPCで処理する2PC構成を実装した。**
+**Wi-Fi通信で、AセットとBセットを別々のノートPCで処理する2PC構成を実装した。**  
+**Implemented a two-PC setup using Wi-Fi communication, where Set A and Set B are processed on separate laptops.**
 
-#### 構成
 
-- メインPC  
-  - Aセットカメラ2台の3D座標を計算  
-  - サブPCからBセットの3D座標をUDPで受信  
-  - Aで見失った色だけBセット座標で補助  
+
+#### 構成 (System Configuration)
+
+- main PC  
+  - Aセットカメラ2台の3D座標を計算 (- Calculates the 3D coordinates from the two Set A cameras)  
+  - サブPCからBセットの3D座標をUDPで受信 (- Receives the 3D coordinates of Set B from the sub PC via UDP)  
+  - Aで見失った色だけBセット座標で補助 (- Uses Set B coordinates as a backup only when a marker is lost in Set A)  
   
-- サブPC  
-  - Bセットカメラ2台の3D座標を計算  
-  - Wi-Fi / UDPでメインPCへ座標JSONを送信  
+- sub PC  
+  - Bセットカメラ2台の3D座標を計算 (- Calculates the 3D coordinates from the two Set B cameras)  
+  - Wi-Fi / UDPでメインPCへ座標JSONを送信 (- Sends the coordinate data to the main PC as JSON via Wi-Fi / UDP)  
 
-#### 使用ファイル
-
-- `redlight_ring_2pc_main.py`  
+#### 使用ファイル (Files Used)
+```bash
+redlight_ring_2pc_main.py
+```  
   - メインPC側で実行する2PC統合版  
   - Aセットカメラ処理、BセットUDP受信、最終判定、BLE送信を担当  
-  
-- `sub_bset_udp_sender.py`  
+  - Two-PC integrated version executed on the main PC
+  - Handles Set A camera processing, Set B UDP reception, final judgment, and BLE transmission
+    Handles Set A camera processing, Set B UDP reception, final judgment, and BLE transmission  
+```bash
+sub_bset_udp_sender.py
+```
   - サブPC側で実行するBセット送信プログラム  
   - Bセットカメラ処理、3D座標計算、UDP送信を担当  
 
-#### 実行順  
+  - Set B sender program executed on the sub PC  
+  - Handles Set B camera processing, 3D coordinate calculation, and UDP transmission  
+#### 実行順(How to Run)  
 
 1. メインPCとサブPCを同じWi-Fiに接続する  
 2. サブPCで `sub_bset_udp_sender.py` を実行する  
 3. メインPCで `redlight_ring_2pc_main.py` を実行する  
-4. メインPC側でB_SET欄に `UDP age: 0.xx s` が表示されれば通信成功  
+4. メインPC側でB_SET欄に `UDP age: 0.xx s` が表示されれば通信成功
+
+1. Connect both the main PC and the sub PC to the same Wi-Fi network.  
+2. Run `sub_bset_udp_sender.py` on the sub PC.  
+3. Run `redlight_ring_2pc_main.py` on the main PC.  
+4. If `UDP age: 0.xx s` appears in the B_SET area on the main PC, the communication is working successfully.  
