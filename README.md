@@ -297,4 +297,35 @@ The Arduino sketch interprets BLE values as follows:
 2-255 = red LED brightness  
 250-255 = treated as inside the goal area  
 
+  
+  
+**2026/05/09**
+**Wi-Fi通信で、AセットとBセットを別々のノートPCで処理する2PC構成を実装した。**
 
+### 構成
+
+- メインPC  
+  - Aセットカメラ2台の3D座標を計算  
+  - サブPCからBセットの3D座標をUDPで受信  
+  - Aで見失った色だけBセット座標で補助  
+  
+- サブPC  
+  - Bセットカメラ2台の3D座標を計算  
+  - Wi-Fi / UDPでメインPCへ座標JSONを送信  
+
+### 使用ファイル
+
+- `redlight_ring_2pc_main.py`  
+  - メインPC側で実行する2PC統合版  
+  - Aセットカメラ処理、BセットUDP受信、最終判定、BLE送信を担当  
+  
+- `sub_bset_udp_sender.py`  
+  - サブPC側で実行するBセット送信プログラム  
+  - Bセットカメラ処理、3D座標計算、UDP送信を担当  
+
+### 実行順  
+
+1. メインPCとサブPCを同じWi-Fiに接続する  
+2. サブPCで `sub_bset_udp_sender.py` を実行する  
+3. メインPCで `redlight_ring_2pc_main.py` を実行する  
+4. メインPC側でB_SET欄に `UDP age: 0.xx s` が表示されれば通信成功  
