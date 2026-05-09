@@ -146,31 +146,28 @@ A_CAM0_INDEX = 1
 A_CAM1_INDEX = 2
 ```
 
-### セッションフォルダ
+### セッションフォルダ・キャリブレーションファイル
 
-キャリブレーションで保存されたフォルダを指定してください。
+現在の版では、Aセット/Bセットともに、基本的には最新のキャリブレーションフォルダや `.npz` ファイルを自動で選択します。
+
+そのため、通常は以下のようなパスを毎回手動で書き換える必要はありません。
 
 ```python
 SESSION_DIR = "calibration_images/xxxx"
-```
-
-### キャリブレーションファイル
-
-生成された `.npz` ファイルのパスを指定してください。
-
-```python
 CALIB_FILE = "calibration_images/xxxx/stereo_calibration_result.npz"
+A_CALIB_FILE = r"calibration_images\xxxx\stereo_calibration_result.npz"
 ```
 
-また、2PC版ではメインPC側で以下を設定します。
+2PC版では、メインPC側で以下の通信設定を使います。
 
 ```python
-A_CALIB_FILE = r"calibration_images\xxxx\stereo_calibration_result.npz"
 USE_B_SET = True
 USE_REMOTE_B_SET = True
 REMOTE_B_UDP_IP = "0.0.0.0"
 REMOTE_B_UDP_PORT = 5005
 ```
+
+特定のキャリブレーション結果を固定して使いたい場合は、コード内で手動指定に戻すこともできます。
 
 ### カメラの開き方
 
@@ -342,3 +339,60 @@ sub_bset_udp_sender.py
 - サブPCのBセット3D座標をメインPC側で受信できた
 - メインPC側でAセットを優先し、Aで見失った色だけBセット座標で補助できた
 - メインPCからXIAO nRF52840 SenseへのBLE LEDフィードバックも併用できた
+
+#### キャリブレーションファイルの自動選択
+
+キャリブレーションを行うたびに、コード内のフォルダ名や `.npz` ファイル名を手動で書き換える手間を減らすため、最新のキャリブレーションフォルダを自動で選択する処理を追加しました。
+
+対応したファイルは以下です。
+
+```bash
+stereo_calibrate_from_saved_pairs.py
+```
+
+- `calibration_images` 内の最新のAセット撮影フォルダを自動で選択
+- 対象フォルダ例：`calib_20260509_013021`
+- 最新フォルダ内に `stereo_calibration_result.npz` を生成
+
+```bash
+stereo_calibrate_B.py
+```
+
+- `calibration_images` 内の最新のBセット撮影フォルダを自動で選択
+- 対象フォルダ例：`calib_B_20260508_235747`
+- 最新フォルダ内に `stereo_calibration_result.npz` を生成
+
+```bash
+redlight_ring_2pc_main.py
+```
+
+- 最新のAセット用 `stereo_calibration_result.npz` を自動で選択
+- Aセットのキャリブレーションをやり直しても、コード内の `A_CALIB_FILE` を毎回書き換える必要がない
+
+```bash
+sub_bset_udp_sender.py
+```
+
+- 最新のBセット用 `stereo_calibration_result.npz` を自動で選択
+- Bセットのキャリブレーションをやり直しても、コード内の `CALIB_FILE` を毎回書き換える必要がない
+
+実行の流れは以下です。
+
+Aセット：
+
+```bash
+python capture_calibration_pairs.py
+python stereo_calibrate_from_saved_pairs.py
+python redlight_ring_2pc_main.py
+```
+
+Bセット：
+
+```bash
+python capture_calibration_pairs_B.py
+python stereo_calibrate_B.py
+python sub_bset_udp_sender.py
+```
+
+注意点として、最新フォルダを自動で使用するため、失敗したキャリブレーションが最後に作成されている場合は、その失敗した結果を使用してしまう可能性があります。
+失敗したキャリブレーションフォルダは削除するか、成功したキャリブレーションを最後に作成してから実行してください。

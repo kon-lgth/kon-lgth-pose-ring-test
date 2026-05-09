@@ -146,31 +146,28 @@ A_CAM0_INDEX = 1
 A_CAM1_INDEX = 2
 ```
 
-### Session Folder
+### Session Folder and Calibration File
 
-Specify the folder where calibration images were saved.
+In the current version, the latest calibration folder or `.npz` file is selected automatically for both Set A and Set B.
+
+Therefore, it is usually not necessary to manually update paths such as:
 
 ```python
 SESSION_DIR = "calibration_images/xxxx"
-```
-
-### Calibration File
-
-Specify the generated `.npz` calibration file.
-
-```python
 CALIB_FILE = "calibration_images/xxxx/stereo_calibration_result.npz"
+A_CALIB_FILE = r"calibration_images\xxxx\stereo_calibration_result.npz"
 ```
 
-For the two-PC version, configure the following on the main PC:
+For the two-PC version, configure the following communication settings on the main PC:
 
 ```python
-A_CALIB_FILE = r"calibration_images\xxxx\stereo_calibration_result.npz"
 USE_B_SET = True
 USE_REMOTE_B_SET = True
 REMOTE_B_UDP_IP = "0.0.0.0"
 REMOTE_B_UDP_PORT = 5005
 ```
+
+If you want to use a specific calibration result, you can still modify the code and specify the path manually.
 
 ### Camera Backend
 
@@ -342,3 +339,60 @@ sub_bset_udp_sender.py
 - The main PC successfully received the Set B 3D coordinates from the sub PC
 - The main PC prioritized Set A and used Set B coordinates only when a marker was lost in Set A
 - BLE LED feedback from the main PC to the XIAO nRF52840 Sense worked together with the two-PC setup
+
+#### Automatic Selection of the Latest Calibration Files
+
+To avoid manually changing folder names or `.npz` calibration file paths after every calibration, automatic selection of the latest calibration folder/file has been added.
+
+The following files support this feature:
+
+```bash
+stereo_calibrate_from_saved_pairs.py
+```
+
+- Automatically selects the latest Set A calibration image folder in `calibration_images`
+- Example target folder: `calib_20260509_013021`
+- Generates `stereo_calibration_result.npz` inside the latest folder
+
+```bash
+stereo_calibrate_B.py
+```
+
+- Automatically selects the latest Set B calibration image folder in `calibration_images`
+- Example target folder: `calib_B_20260508_235747`
+- Generates `stereo_calibration_result.npz` inside the latest folder
+
+```bash
+redlight_ring_2pc_main.py
+```
+
+- Automatically selects the latest Set A `stereo_calibration_result.npz`
+- This means `A_CALIB_FILE` no longer needs to be manually updated after recalibrating Set A
+
+```bash
+sub_bset_udp_sender.py
+```
+
+- Automatically selects the latest Set B `stereo_calibration_result.npz`
+- This means `CALIB_FILE` no longer needs to be manually updated after recalibrating Set B
+
+The typical workflow is as follows.
+
+Set A:
+
+```bash
+python capture_calibration_pairs.py
+python stereo_calibrate_from_saved_pairs.py
+python redlight_ring_2pc_main.py
+```
+
+Set B:
+
+```bash
+python capture_calibration_pairs_B.py
+python stereo_calibrate_B.py
+python sub_bset_udp_sender.py
+```
+
+Note that the latest folder is selected automatically. If a failed calibration folder was created most recently, that failed result may be used.
+Delete failed calibration folders or make sure the latest calibration result is a successful one before running the system.
