@@ -38,7 +38,7 @@ def get_latest_calibration_file(prefix="calib_B_20"):
     print("======================================")
 
     return latest_file
-    
+
 # =========================
 # UDP送信設定
 # =========================
@@ -51,7 +51,7 @@ UDP_PORT = 5005
 # =========================
 CALIB_FILE = get_latest_calibration_file("calib_B_20")
 
-CAM0_INDEX = 1
+CAM0_INDEX = 0
 CAM1_INDEX = 2
 
 BACKEND = "DSHOW"
@@ -61,31 +61,39 @@ CAPTURE_H = 480
 FPS = 15
 
 DISPLAY_MIRROR = True
-VIEW_W = 320
-VIEW_H = 240
+VIEW_W = 640
+VIEW_H = 480
 
 SEND_INTERVAL_SEC = 0.05  # 約20Hz上限
 
 # 色領域の最小面積
 MIN_AREA = 40
+
+MIN_AREA_BY_COLOR = {
+    "RED": 300,
+    "YELLOW": 500,
+    "BLUE": 300,
+    "GREEN": 500,
+}
+
 kernel = np.ones((5, 5), np.uint8)
 
 # =========================
 # HSV設定
 # =========================
-LOWER_RED_1 = np.array([0, 120, 50])
+LOWER_RED_1 = np.array([0, 140, 80])
 UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 120, 50])
+LOWER_RED_2 = np.array([170, 140, 80])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-LOWER_YELLOW = np.array([20, 80, 80])
-UPPER_YELLOW = np.array([35, 255, 255])
+LOWER_YELLOW = np.array([22, 120, 120])
+UPPER_YELLOW = np.array([34, 255, 255])
 
-LOWER_BLUE = np.array([95, 150, 50])
-UPPER_BLUE = np.array([130, 255, 255])
+LOWER_BLUE = np.array([100, 170, 80])
+UPPER_BLUE = np.array([125, 255, 255])
 
-LOWER_GREEN = np.array([40, 60, 50])
-UPPER_GREEN = np.array([85, 255, 255])
+LOWER_GREEN = np.array([45, 100, 80])
+UPPER_GREEN = np.array([80, 255, 255])
 
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
@@ -188,8 +196,10 @@ def detect_color_center(source_frame, draw_frame, color_name):
     c = max(contours, key=cv2.contourArea)
     area = cv2.contourArea(c)
 
-    if area < MIN_AREA:
-        return None, f"{color_name}: small area={int(area)}", (0, 0, 255)
+    min_area = MIN_AREA_BY_COLOR.get(color_name, MIN_AREA)
+
+    if area < min_area:
+        return None, f"{color_name}: small area={int(area)} < {min_area}", (0, 0, 255)
 
     M = cv2.moments(c)
     if M["m00"] == 0:
