@@ -101,15 +101,6 @@ BLE_LED_CHAR_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 # False: 一時的な見失い時のLAST_USED判定でもLED反応を維持する
 REQUIRE_TARGET_LIVE_FOR_LED = False
 
-# ステージ内外LED制御
-# True : カメラ画面内でLIVE検出されている時だけ白/赤で点灯し、画面外では消灯する
-# False: 従来に近い挙動。BLE接続中は基本白で待機する
-ENABLE_STAGE_VISIBLE_LED = True
-
-# True : ステージ内外判定ではLAST_USEDを使わず、A/BどちらかでLIVE検出できた時だけ「ステージ内」とする
-# 画面外に出たらすぐ消灯させたいので、基本は True 推奨
-STAGE_VISIBLE_REQUIRES_LIVE = True
-
 # BLEで反応させる判定対象の色
 FEEDBACK_TARGET_COLOR = "RED"
 
@@ -144,32 +135,25 @@ LOST_HOLD_SEC = 0.7
 # 色領域の最小面積
 MIN_AREA = 40
 
-MIN_AREA_BY_COLOR = {
-    "RED": 300,
-    "YELLOW": 500,
-    "BLUE": 300,
-    "GREEN": 500,
-}
-
 kernel = np.ones((5, 5), np.uint8)
 
 # =========================
 # HSV設定
 # 照明や素材に合わせて調整する
 # =========================
-LOWER_RED_1 = np.array([0, 140, 80])
+LOWER_RED_1 = np.array([0, 120, 50])
 UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 140, 80])
+LOWER_RED_2 = np.array([170, 120, 50])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-LOWER_YELLOW = np.array([22, 120, 120])
-UPPER_YELLOW = np.array([34, 255, 255])
+LOWER_YELLOW = np.array([20, 80, 80])
+UPPER_YELLOW = np.array([35, 255, 255])
 
-LOWER_BLUE = np.array([100, 170, 80])
-UPPER_BLUE = np.array([125, 255, 255])
+LOWER_BLUE = np.array([95, 150, 50])
+UPPER_BLUE = np.array([130, 255, 255])
 
-LOWER_GREEN = np.array([45, 100, 80])
-UPPER_GREEN = np.array([80, 255, 255])
+LOWER_GREEN = np.array([40, 60, 50])
+UPPER_GREEN = np.array([85, 255, 255])
 
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
@@ -308,10 +292,8 @@ def detect_color_center(source_frame, draw_frame, color_name):
     c = max(contours, key=cv2.contourArea)
     area = cv2.contourArea(c)
 
-    min_area = MIN_AREA_BY_COLOR.get(color_name, MIN_AREA)
-    
-    if area < min_area:
-        return mask, None, f"{color_name}: small area={int(area)} < {min_area}", (0, 0, 255)
+    if area < MIN_AREA:
+        return mask, None, f"{color_name}: small area={int(area)}", (0, 0, 255)
 
     M = cv2.moments(c)
     if M["m00"] == 0:
@@ -1152,18 +1134,11 @@ def main():
                 or (set_b is not None and set_b.states[target_color]["target"] is not None)
             )
 
-            # ステージ内外判定:
-            # A/Bどちらかのカメラセットで対象色がLIVE検出されていれば「ステージ内」
-            # LAST_USEDは、見失い補助には使うが、ステージ内外判定には使わない。
-            target_live_in_stage = bool(
-                target_state
-                and target_state["source"] in ["A_LIVE", "B_LIVE"]
-            )
-
-            if STAGE_VISIBLE_REQUIRES_LIVE:
-                target_visible = target_live_in_stage
-            elif REQUIRE_TARGET_LIVE_FOR_LED:
-                target_visible = target_live_in_stage
+            if REQUIRE_TARGET_LIVE_FOR_LED:
+                target_visible = bool(
+                    target_state
+                    and target_state["source"] in ["A_LIVE", "B_LIVE"]
+                )
             else:
                 target_visible = bool(
                     target_state
@@ -1181,32 +1156,9 @@ def main():
             else:
                 red_brightness = None
 
-            # BLE送信値の最終決定
-            #   ステージ外: 0 = OFF
-            #   ステージ内・まだ赤フィードバックなし: 1 = WHITE
-            #   ステージ内・ゴール接近/ゴール内: 2-255 = RED brightness
-            if ENABLE_STAGE_VISIBLE_LED:
-                if not target_live_in_stage:
-                    auto_ble_state = BleFeedbackController.STATE_OFF
-                elif red_brightness is None:
-                    auto_ble_state = BleFeedbackController.STATE_CONNECTED_WHITE
-                else:
-                    auto_ble_state = max(
-                        BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE,
-                        min(255, int(red_brightness)),
-                    )
-            else:
-                if red_brightness is None:
-                    auto_ble_state = BleFeedbackController.STATE_CONNECTED_WHITE
-                else:
-                    auto_ble_state = max(
-                        BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE,
-                        min(255, int(red_brightness)),
-                    )
-
             if ble_feedback is not None:
                 if force_ble_state is None:
-                    ble_feedback.set_state(auto_ble_state)
+                    ble_feedback.set_red_brightness(red_brightness)
                 else:
                     ble_feedback.set_state(force_ble_state)
 
@@ -1397,12 +1349,8 @@ def main():
                 ble_color = (0, 255, 255)
 
             elif ble_feedback is not None and ble_feedback.is_connected:
-                if ENABLE_STAGE_VISIBLE_LED and not target_live_in_stage:
-                    ble_text = f"BLE LED: SEND 0 OFF / {FEEDBACK_TARGET_COLOR} OUT OF STAGE"
-                    ble_color = (120, 120, 120)
-                else:
-                    ble_text = f"BLE LED: SEND 1 WHITE / {FEEDBACK_TARGET_COLOR} IN STAGE"
-                    ble_color = (255, 255, 255)
+                ble_text = "BLE LED: SEND 1 WHITE"
+                ble_color = (255, 255, 255)
 
             else:
                 ble_text = "BLE LED: SEARCHING/OFF"
