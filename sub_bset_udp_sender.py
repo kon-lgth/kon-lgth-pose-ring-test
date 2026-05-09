@@ -3,6 +3,8 @@ import numpy as np
 import socket
 import json
 import time
+import os
+import glob
 
 # ============================================================
 # PoseRing B Set UDP Sender
@@ -12,6 +14,31 @@ import time
 # UDPでメインPCへ送信する。
 # ============================================================
 
+def get_latest_calibration_file(prefix="calib_B_20"):
+    """
+    calibration_images 内から、指定prefixで始まるフォルダのうち、
+    stereo_calibration_result.npz が存在する最新フォルダを自動で選ぶ。
+    """
+    base_dir = "calibration_images"
+
+    pattern = os.path.join(base_dir, prefix + "*", "stereo_calibration_result.npz")
+    files = glob.glob(pattern)
+
+    if not files:
+        raise FileNotFoundError(
+            f"キャリブレーションファイルが見つかりません: {pattern}"
+        )
+
+    latest_file = max(files, key=os.path.getmtime)
+
+    print("======================================")
+    print("[AUTO CALIB] 最新のBセットキャリブレーションを使用します")
+    print(f"[AUTO CALIB] prefix: {prefix}")
+    print(f"[AUTO CALIB] file  : {latest_file}")
+    print("======================================")
+
+    return latest_file
+    
 # =========================
 # UDP送信設定
 # =========================
@@ -22,7 +49,7 @@ UDP_PORT = 5005
 # =========================
 # Bセット設定
 # =========================
-CALIB_FILE = r"calibration_images\calib_B_20260508_235747\stereo_calibration_result.npz"
+CALIB_FILE = get_latest_calibration_file("calib_B_20")
 
 CAM0_INDEX = 1
 CAM1_INDEX = 2
