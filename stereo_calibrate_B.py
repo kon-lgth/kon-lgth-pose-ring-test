@@ -3,10 +3,45 @@ import numpy as np
 import os
 import glob
 
+
+def get_latest_session_dir(prefix="calib_B_20"):
+    """
+    calibration_images 内から、指定prefixで始まる最新のBセット撮影フォルダを選ぶ。
+    cam0 / cam1 フォルダがあり、画像が入っているものを対象にする。
+    """
+    base_dir = "calibration_images"
+    pattern = os.path.join(base_dir, prefix + "*")
+    dirs = [d for d in glob.glob(pattern) if os.path.isdir(d)]
+
+    valid_dirs = []
+
+    for d in dirs:
+        cam0_dir = os.path.join(d, "cam0")
+        cam1_dir = os.path.join(d, "cam1")
+
+        images0 = glob.glob(os.path.join(cam0_dir, "*.png"))
+        images1 = glob.glob(os.path.join(cam1_dir, "*.png"))
+
+        if len(images0) > 0 and len(images1) > 0:
+            valid_dirs.append(d)
+
+    if not valid_dirs:
+        raise RuntimeError(
+            f"有効なBセットキャリブレーション画像フォルダが見つかりません: {pattern}"
+        )
+
+    latest_dir = max(valid_dirs, key=os.path.getmtime)
+
+    print("======================================")
+    print("[AUTO SESSION] 最新のBセット撮影フォルダを使用します")
+    print(f"[AUTO SESSION] {latest_dir}")
+    print("======================================")
+
+    return latest_dir
 # =========================
 # Bセット用 設定
 # =========================
-SESSION_DIR = r"calibration_images\calib_B_20260504_140722"
+SESSION_DIR = get_latest_session_dir("calib_B_20")
 CAM0_DIR = os.path.join(SESSION_DIR, "cam0")
 CAM1_DIR = os.path.join(SESSION_DIR, "cam1")
 

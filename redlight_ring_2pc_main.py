@@ -5,6 +5,9 @@ import time
 import socket
 import json
 
+import os
+import glob
+
 import asyncio
 import threading
 import queue
@@ -29,13 +32,36 @@ from bleak import BleakScanner, BleakClient
 #   Aを使う色は A現在座標 vs A目標座標。
 #   Bを使う色は B現在座標 vs B目標座標。
 # ============================================================
+def get_latest_calibration_file(prefix):
+    """
+    calibration_images 内から、指定prefixで始まるフォルダのうち、
+    stereo_calibration_result.npz が存在する最新フォルダを自動で選ぶ。
+    """
+    base_dir = "calibration_images"
 
+    pattern = os.path.join(base_dir, prefix + "*", "stereo_calibration_result.npz")
+    files = glob.glob(pattern)
+
+    if not files:
+        raise FileNotFoundError(
+            f"キャリブレーションファイルが見つかりません: {pattern}"
+        )
+
+    latest_file = max(files, key=os.path.getmtime)
+
+    print("======================================")
+    print("[AUTO CALIB] 最新キャリブレーションを使用します")
+    print(f"[AUTO CALIB] prefix: {prefix}")
+    print(f"[AUTO CALIB] file  : {latest_file}")
+    print("======================================")
+
+    return latest_file
 # =========================
 # 設定
 # =========================
 
 # Aセット用キャリブレーション結果
-A_CALIB_FILE = r"calibration_images\calib_20260509_013021\stereo_calibration_result.npz"
+A_CALIB_FILE = get_latest_calibration_file("calib_20")
 
 # Bセット用キャリブレーション結果
 # リモートBセットを使う場合、このファイルは基本的には使わない。

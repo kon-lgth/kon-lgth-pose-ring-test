@@ -3,15 +3,50 @@ import numpy as np
 import os
 import glob
 
+
+def get_latest_session_dir(prefix="calib_20"):
+    """
+    calibration_images 内から、指定prefixで始まる最新の撮影フォルダを選ぶ。
+    cam0 / cam1 フォルダがあり、画像が入っているものを対象にする。
+    """
+    base_dir = "calibration_images"
+    pattern = os.path.join(base_dir, prefix + "*")
+    dirs = [d for d in glob.glob(pattern) if os.path.isdir(d)]
+
+    valid_dirs = []
+
+    for d in dirs:
+        cam0_dir = os.path.join(d, "cam0")
+        cam1_dir = os.path.join(d, "cam1")
+
+        images0 = glob.glob(os.path.join(cam0_dir, "*.png"))
+        images1 = glob.glob(os.path.join(cam1_dir, "*.png"))
+
+        if len(images0) > 0 and len(images1) > 0:
+            valid_dirs.append(d)
+
+    if not valid_dirs:
+        raise RuntimeError(
+            f"有効なキャリブレーション画像フォルダが見つかりません: {pattern}"
+        )
+
+    latest_dir = max(valid_dirs, key=os.path.getmtime)
+
+    print("======================================")
+    print("[AUTO SESSION] 最新のAセット撮影フォルダを使用します")
+    print(f"[AUTO SESSION] {latest_dir}")
+    print("======================================")
+
+    return latest_dir
 # =========================
 # 設定
 # =========================
-SESSION_DIR = r"calibration_images\calib_20260422_121534"
+SESSION_DIR = get_latest_session_dir("calib_20")
 CAM0_DIR = os.path.join(SESSION_DIR, "cam0")
 CAM1_DIR = os.path.join(SESSION_DIR, "cam1")
 
 PATTERN_SIZE = (9, 6)   # 内側の交点数
-SQUARE_SIZE = 26.0      # 1マスの一辺の長さ（mm）。自分の印刷物に合わせて変更する
+SQUARE_SIZE = 51.0      # 1マスの一辺の長さ（mm）。自分の印刷物に合わせて変更する
 
 # 保存先
 OUTPUT_FILE = os.path.join(SESSION_DIR, "stereo_calibration_result.npz")
@@ -157,7 +192,7 @@ R0, R1, P0, P1, Q, roi0, roi1 = cv2.stereoRectify(
     K1, dist1,
     image_size,
     R, T,
-    alpha=0
+    alpha=1.0
 )
 
 # 歪み補正マップ作成
