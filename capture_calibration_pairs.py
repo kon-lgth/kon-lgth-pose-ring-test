@@ -6,11 +6,11 @@ import time
 # =========================
 # 設定
 # =========================
-CAM0_INDEX = 2                  # ノートPC内蔵カメラ
-CAM1_INDEX = 3                  # iPhone (DroidCam)
+CAM0_INDEX = 1                  # ノートPC内蔵カメラ
+CAM1_INDEX = 2                  # iPhone (DroidCam)
 PATTERN_SIZE = (9, 6)           # 内側の交点数 (9 x 6)
 START_DELAY_SEC = 10             # 何秒後に自動撮影を始めるか
-CAPTURE_INTERVAL_SEC = 3.0      # 何秒おきに保存するか
+CAPTURE_INTERVAL_SEC = 2.0      # 何秒おきに保存するか
 TARGET_PAIRS = 30               # 保存したいペア数
 MIN_CORNER_SHIFT = 18.0         # 前回と似すぎる姿勢を避けるためのしきい値
 WINDOW_NAME = "Stereo Calibration Capture"
@@ -175,8 +175,8 @@ while True:
                 if c0.shape == p0.shape and c1.shape == p1.shape:
                     shift0 = np.mean(np.linalg.norm(c0 - p0, axis=1))
                     shift1 = np.mean(np.linalg.norm(c1 - p1, axis=1))
-                    # フレーム間で平均2.5px以上動いていたら「移動中」とみなす
-                    if max(shift0, shift1) > 2.5:
+                    # フレーム間で平均6.0px以上動いていたら「移動中」とみなす
+                    if max(shift0, shift1) > 6.0:
                         is_moving = True
 
             # 状態に応じたタイマーのリセットと進行

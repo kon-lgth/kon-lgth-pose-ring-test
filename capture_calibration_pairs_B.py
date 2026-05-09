@@ -8,8 +8,8 @@ import time
 # =========================
 # 今回検出されたカメラ番号 [1, 2, 4, 5] のうち、
 # まずBセットとして Index 4 と Index 5 を使う
-CAM0_INDEX = 4
-CAM1_INDEX = 5
+CAM0_INDEX = 0
+CAM1_INDEX = 3
 
 PATTERN_SIZE = (9, 6)           # チェッカーボード内側の交点数
 START_DELAY_SEC = 10            # 何秒後に自動撮影を始めるか
