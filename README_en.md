@@ -6,9 +6,9 @@
 
 This project performs stereo calibration using two cameras and measures the 3D positions of colored markers.
 
-The current version supports 3D coordinate detection for four colored markers: red, yellow, blue, and green. It has also been verified that BLE LED feedback to a XIAO nRF52840 Sense works for the red marker.
+The current version supports 3D coordinate detection for four colored markers: red, yellow, blue, and green. It also supports a two-PC setup, BLE LED feedback to a XIAO nRF52840 Sense, goal sound playback, clear time measurement, target/clear photo capture, and result photo comparison display.
 
-As of 2026/05/09, a two-PC setup has also been implemented. In this setup, Set A and Set B are processed on separate laptops, and the 3D coordinates from Set B are sent to the main PC via Wi-Fi / UDP.
+As of 2026/05/09, a two-PC setup has been implemented. In this setup, Set A and Set B are processed on separate laptops, and the 3D coordinates from Set B are sent to the main PC via Wi-Fi / UDP. As of 2026/05/10, the official main PC file `redlight_ring_2pc_main.py` has been updated to include photo capture, clear time measurement, and stage in/out LED control.
 
 ---
 
@@ -41,16 +41,18 @@ pip install bleak
 
 ## BLE LED Receiver Program for XIAO nRF52840 Sense
 
-When using `redlight_ring.py` or `redlight_ring_2pc_main.py`, you must upload `RED_blightness_D.ino` to the XIAO nRF52840 Sense beforehand.
+When using `redlight_ring.py` or `redlight_ring_2pc_main.py`, you must upload `RED_blightness_D.ino` to the XIAO nRF52840 Sense beforehand. The current `RED_blightness_D.ino` reflects the contents of `RED_blightness_D_volume.ino` as the official version and includes DFPlayer Mini volume safety handling.
 
 In this sketch, the XIAO operates as a BLE device named `PoseRing_YELLOW`.
 
 The received BLE values are interpreted as follows:
 
 - `0`: LED off
-- `1`: White LED while BLE is connected
+- `1`: White LED while BLE is connected or while the target is inside the stage
 - `2-255`: Red LED brightness
 - `250-255`: Treated as inside the goal area (red blinking + sound playback after 3 seconds)
+
+For DFPlayer Mini sound playback, the firmware sets a safe volume not only during initialization but also immediately before each playback. This helps prevent the sound effect from occasionally playing louder than expected.
 
 The built-in LED on the XIAO nRF52840 Sense turns on with `LOW` and off with `HIGH`.
 
@@ -126,6 +128,30 @@ python redlight_ring_2pc_main.py
 
 If `UDP age: 0.xx s` appears in the B_SET area on the main PC, the communication is working successfully.
 
+The current `redlight_ring_2pc_main.py` is the official file name for the version previously developed as `redlight_ring_2pc_main_step4_photo_capture.py`. The older `redlight_ring_2pc_main.py` should be kept in `archive/` instead of being deleted.
+
+Main key operations are as follows.
+
+- `s`: Save the current four-color coordinates for both Set A and Set B as target positions, and save the target pose photo. The game does not start yet.
+- `g`: Start the game and begin clear time measurement.
+- `c`: Reset target positions, game state, and CLEAR state.
+- `r`: Reset target positions, last-used judgment data, game state, and CLEAR state.
+- `0 / 1 / 2`: BLE test transmission.
+- `a`: Return to automatic BLE control.
+- `q / Esc`: Quit.
+
+Main added behavior:
+
+- The LED ring turns off when the target leaves the camera view, meaning outside the stage.
+- The LED ring lights white when the target is visible inside the stage.
+- If the target is briefly hidden by the body, the white LED state is held for a short grace period.
+- Pressing `s` saves the target pose, but the game does not start until `g` is pressed.
+- Clear time is measured from the moment `g` is pressed.
+- Pressing `s` saves a target pose photo using A Cam0.
+- When ALL CLEAR is reached, a clear pose photo using A Cam0 is saved.
+- After clearing, the target pose photo and clear pose photo are displayed side by side.
+- The comparison image preserves the aspect ratio and is resized to fit better on the monitor.
+
 ---
 
 ## Parameters to Modify Before Running
@@ -198,19 +224,19 @@ If `A_BACKEND = "DSHOW"` is used, the same camera index may open a different phy
 ```text
 PoseRingTest/
 ├─ capture_calibration_pairs.py
+├─ capture_calibration_pairs_B.py
 ├─ stereo_calibrate_from_saved_pairs.py
-├─ green_3d_from_calibration.py
+├─ stereo_calibrate_B.py
 ├─ four_color_3d_target_game.py
 ├─ redlight_ring.py
-├─ redlight_ring_2pc_main.py
-├─ sub_bset_udp_sender.py
-├─ yellow_3d_ble_led_test.py
-├─ xiao_ble_led_receiver.ino
-├─ RED_blightness_D.ino
-├─ camera_check_2cam.py
-├─ camera_index_check.py
+├─ redlight_ring_2pc_main.py          # Official main PC version; reflects the step4 photo capture version
+├─ sub_bset_udp_sender.py             # Sub PC Set B UDP sender
+├─ RED_blightness_D.ino               # Official XIAO firmware; reflects the volume-safe version
 ├─ calibration_images/
-└─ archive/
+├─ pose_photos/                       # Saved target, clear, and comparison photos
+└─ archive/                           # Archived older versions
+   ├─ redlight_ring_2pc_main_before_stage_led.py
+   └─ RED_blightness_D_before_volume.ino
 ```
 
 ---
@@ -333,6 +359,30 @@ sub_bset_udp_sender.py
 3. Run `redlight_ring_2pc_main.py` on the main PC.
 4. If `UDP age: 0.xx s` appears in the B_SET area on the main PC, the communication is working successfully.
 
+The current `redlight_ring_2pc_main.py` is the official file name for the version previously developed as `redlight_ring_2pc_main_step4_photo_capture.py`. The older `redlight_ring_2pc_main.py` should be kept in `archive/` instead of being deleted.
+
+Main key operations are as follows.
+
+- `s`: Save the current four-color coordinates for both Set A and Set B as target positions, and save the target pose photo. The game does not start yet.
+- `g`: Start the game and begin clear time measurement.
+- `c`: Reset target positions, game state, and CLEAR state.
+- `r`: Reset target positions, last-used judgment data, game state, and CLEAR state.
+- `0 / 1 / 2`: BLE test transmission.
+- `a`: Return to automatic BLE control.
+- `q / Esc`: Quit.
+
+Main added behavior:
+
+- The LED ring turns off when the target leaves the camera view, meaning outside the stage.
+- The LED ring lights white when the target is visible inside the stage.
+- If the target is briefly hidden by the body, the white LED state is held for a short grace period.
+- Pressing `s` saves the target pose, but the game does not start until `g` is pressed.
+- Clear time is measured from the moment `g` is pressed.
+- Pressing `s` saves a target pose photo using A Cam0.
+- When ALL CLEAR is reached, a clear pose photo using A Cam0 is saved.
+- After clearing, the target pose photo and clear pose photo are displayed side by side.
+- The comparison image preserves the aspect ratio and is resized to fit better on the monitor.
+
 #### Confirmed Results
 
 - UDP communication from the sub PC to the main PC worked on the university Wi-Fi network
@@ -396,3 +446,51 @@ python sub_bset_udp_sender.py
 
 Note that the latest folder is selected automatically. If a failed calibration folder was created most recently, that failed result may be used.
 Delete failed calibration folders or make sure the latest calibration result is a successful one before running the system.
+
+### 2026/05/10
+
+#### Main PC `redlight_ring_2pc_main.py` Update
+
+The features tested in `redlight_ring_2pc_main_step4_photo_capture.py` have been reflected in the official execution file name, `redlight_ring_2pc_main.py`. The previous `redlight_ring_2pc_main.py` should be kept in `archive/` instead of being deleted.
+
+Main additions and changes:
+
+- Pressing `s` saves the target coordinates and target pose photo only; it does not start the game.
+- Pressing `g` starts the game and begins clear time measurement.
+- The clear time is fixed and displayed when ALL CLEAR is reached.
+- The LED ring turns off when the target ring goes outside the camera view, meaning outside the stage.
+- The LED ring lights white while the target ring is visible inside the stage.
+- If the target ring is briefly hidden by the body, the white LED state is held for a short grace period.
+- After the game starts, the LED feedback becomes red according to the distance from the goal.
+- Target pose and clear pose photos are saved.
+- Only the A Cam0 image is used for photo capture.
+- After clearing, the target pose photo and clear pose photo are displayed side by side.
+- The comparison image preserves its aspect ratio and is adjusted to fit better on the monitor.
+
+Photos are saved per session in the following folder:
+
+```text
+pose_photos/session_YYYYMMDD_HHMMSS/
+```
+
+Example saved files:
+
+```text
+challenge_pose_YYYYMMDD_HHMMSS.jpg
+clear_pose_YYYYMMDD_HHMMSS.jpg
+comparison_YYYYMMDD_HHMMSS.jpg
+```
+
+#### XIAO `RED_blightness_D.ino` Update
+
+The DFPlayer Mini volume safety changes from `RED_blightness_D_volume.ino` have been reflected in the official `RED_blightness_D.ino`. The previous `RED_blightness_D.ino` should be kept in `archive/` instead of being deleted.
+
+Main changes:
+
+- Added `DFPLAYER_SAFE_VOLUME`.
+- Sets the DFPlayer Mini volume to the safe value during initialization.
+- Resets the volume to the safe value immediately before each sound playback.
+- Waits briefly after setting the volume before playback.
+- Adds protection against the sound effect occasionally playing louder than usual.
+
+If the sound is still too loud, lower `DFPLAYER_SAFE_VOLUME`. If it is too quiet, raise it slightly.
