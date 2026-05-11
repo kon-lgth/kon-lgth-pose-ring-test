@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PoseRing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    /* ── Welcome screen ── */
+    body { overflow: hidden; }
+
+    #stars { position:fixed; inset:0; z-index:0; }
+
+    .welcome-wrap {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh; padding: 2rem;
+      text-align: center;
+    }
+
+    .logo-block { margin-bottom: 3rem; }
+    .logo-ring {
+      display: inline-block;
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      color: #fff;
+      text-shadow: 0 0 20px #a78bfa, 0 0 60px #7c3aed, 0 0 100px #4c1d95;
+      letter-spacing: 4px;
+      animation: title-pulse 3s ease-in-out infinite;
+    }
+    .logo-sub {
+      font-size: clamp(0.5rem, 1.5vw, 0.75rem);
+      color: #c4b5fd;
+      letter-spacing: 8px;
+      margin-top: 1rem;
+      animation: fade-in 2s ease forwards;
+    }
+
+    @keyframes title-pulse {
+      0%,100% { text-shadow: 0 0 20px #a78bfa, 0 0 60px #7c3aed; }
+      50%      { text-shadow: 0 0 40px #c4b5fd, 0 0 120px #a78bfa, 0 0 180px #7c3aed; }
+    }
+
+    /* Animated rings decoration */
+    .rings-deco {
+      position: relative; width: 220px; height: 220px;
+      margin: 0 auto 2rem;
+    }
+    .ring {
+      position: absolute; border-radius: 50%; border: 4px solid;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+    }
+    .ring:nth-child(1){ width:60px;  height:60px;  border-color:#ef4444; animation: spin 4s linear infinite; }
+    .ring:nth-child(2){ width:110px; height:110px; border-color:#eab308; animation: spin 6s linear infinite reverse; }
+    .ring:nth-child(3){ width:160px; height:160px; border-color:#3b82f6; animation: spin 8s linear infinite; }
+    .ring:nth-child(4){ width:210px; height:210px; border-color:#22c55e; animation: spin 10s linear infinite reverse; }
+    @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+    /* Press start button */
+    .press-start {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.7rem, 2vw, 1rem);
+      color: #fff;
+      background: transparent;
+      border: 3px solid #fff;
+      padding: 1rem 2.5rem;
+      cursor: pointer;
+      margin-bottom: 3rem;
+      position: relative;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      transition: all 0.15s;
+      animation: blink 1.4s step-start infinite;
+    }
+    .press-start:hover { background: #fff; color: #1e1b4b; animation: none; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Quick links */
+    .quick-links { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
+    .quick-link {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.6rem;
+      padding: 0.75rem 1.5rem;
+      border: 2px solid;
+      text-decoration: none;
+      letter-spacing: 1px;
+      transition: all 0.15s;
+    }
+    .quick-link.player   { color: #4ade80; border-color: #4ade80; }
+    .quick-link.operator { color: #fb923c; border-color: #fb923c; }
+    .quick-link.player:hover   { background: #4ade80; color: #000; }
+    .quick-link.operator:hover { background: #fb923c; color: #000; }
+
+    /* Setup modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #0f0e2a; border: 3px solid #a78bfa;
+      padding: 2.5rem; max-width: 520px; width: 90%;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-title {
+      font-size: 0.85rem; color: #c4b5fd;
+      margin-bottom: 2rem; text-align: center;
+    }
+    .form-row { margin-bottom: 1.2rem; }
+    .form-row label {
+      display: block; font-size: 0.5rem; color: #a78bfa;
+      margin-bottom: 0.4rem; letter-spacing: 1px;
+    }
+    .form-row input, .form-row select {
+      width: 100%; background: #1e1b4b; color: #e2e8f0;
+      border: 2px solid #4c1d95; padding: 0.6rem;
+      font-family: 'Press Start 2P', monospace; font-size: 0.5rem;
+      box-sizing: border-box;
+    }
+    .form-row input:focus, .form-row select:focus {
+      outline: none; border-color: #a78bfa;
+    }
+    .modal-actions { display: flex; gap: 1rem; margin-top: 2rem; justify-content: flex-end; }
+    .btn-cancel {
+      font-family: 'Press Start 2P', monospace; font-size: 0.55rem;
+      background: transparent; border: 2px solid #6b7280;
+      color: #9ca3af; padding: 0.7rem 1.2rem; cursor: pointer;
+    }
+    .btn-cancel:hover { border-color: #fff; color: #fff; }
+    .btn-go {
+      font-family: 'Press Start 2P', monospace; font-size: 0.55rem;
+      background: #7c3aed; border: 2px solid #a78bfa;
+      color: #fff; padding: 0.7rem 1.5rem; cursor: pointer;
+    }
+    .btn-go:hover { background: #a78bfa; }
+  </style>
+</head>
+<body>
+  <canvas id="stars"></canvas>
+
+  <div class="welcome-wrap">
+    <div class="rings-deco">
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring"></div>
+    </div>
+
+    <div class="logo-block">
+      <div class="logo-ring">POSE<span style="color:#a78bfa">RING</span></div>
+      <div class="logo-sub">3D EXPLORATION GAME</div>
+    </div>
+
+    <button class="press-start" onclick="openSetup()">▶ PRESS START</button>
+
+    <div class="quick-links">
+      <a href="/player"   class="quick-link player">👾 PLAYER SCREEN</a>
+      <a href="/operator" class="quick-link operator">🎮 OPERATOR</a>
+    </div>
+  </div>
+
+  <!-- Setup Modal -->
+  <div class="modal-overlay" id="setupModal">
+    <div class="modal-box">
+      <div class="modal-title">── GAME SETUP ──</div>
+
+      <div class="form-row">
+        <label>PLAYER NAMES (comma-separated)</label>
+        <input type="text" id="f-players" value="Player 1, Player 2" placeholder="Alice, Bob, Carol"/>
+      </div>
+
+      <div class="form-row">
+        <label>DIFFICULTY</label>
+        <select id="f-difficulty">
+          <option value="easy">EASY   — big zone, short hold</option>
+          <option value="medium" selected>MEDIUM — balanced</option>
+          <option value="hard">HARD   — tight zone, long hold</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>POSES PER ROUND</label>
+        <select id="f-poses">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="7">7</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>NUMBER OF ROUNDS</label>
+        <select id="f-rounds">
+          <option value="1">1</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeSetup()">CANCEL</button>
+        <button class="btn-go"     onclick="startGame()">START GAME ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script>
+    /* ── Star field ── */
+    (function() {
+      const canvas = document.getElementById('stars');
+      const ctx    = canvas.getContext('2d');
+      let stars    = [];
+
+      function resize() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      function initStars() {
+        stars = [];
+        for (let i = 0; i < 180; i++) {
+          stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            r: Math.random() * 1.8 + 0.3,
+            a: Math.random(),
+            s: Math.random() * 0.008 + 0.002,
+          });
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        stars.forEach(s => {
+          s.a += s.s;
+          if (s.a > 1) s.a = 0;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,255,255,${s.a})`;
+          ctx.fill();
+        });
+        requestAnimationFrame(draw);
+      }
+
+      window.addEventListener('resize', () => { resize(); initStars(); });
+      resize(); initStars(); draw();
+    })();
+
+    /* ── Socket.IO ── */
+    const socket = io();
+
+    /* ── Modal logic ── */
+    function openSetup()  { document.getElementById('setupModal').classList.add('open'); }
+    function closeSetup() { document.getElementById('setupModal').classList.remove('open'); }
+
+    function startGame() {
+      const players = document.getElementById('f-players').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+      const data = {
+        players:         players.length ? players : ['Player 1'],
+        difficulty:      document.getElementById('f-difficulty').value,
+        poses_per_round: parseInt(document.getElementById('f-poses').value),
+        num_rounds:      parseInt(document.getElementById('f-rounds').value),
+      };
+      socket.emit('cmd_start_game', data);
+      closeSetup();
+      // Open player screen after short delay
+      setTimeout(() => window.location.href = '/player', 400);
+    }
+  </script>
+</body>
+</html>
