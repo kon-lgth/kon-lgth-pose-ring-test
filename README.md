@@ -1,4 +1,4 @@
-# Pose Ring: A 3D Exploration Game
+# PoseRing: A 3D Exploration Game
 
 <img width="2826" height="1592" alt="image" src="https://github.com/user-attachments/assets/69845a69-7b99-426c-aa8f-f52ea088ad11" />
 
