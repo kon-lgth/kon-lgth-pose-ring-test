@@ -2,6 +2,83 @@
 
 [English version](README_en.md)
 
+## Web Interface Quick Start / Webインターフェースのクイックスタート
+
+Use the web interface for the current game flow. The operator screen is for the game master who prepares poses, starts rounds, monitors the four cameras, and controls audio. The player screen is for the shared display or tablet that players can see before/after each round.
+
+現在のゲーム進行ではWebインターフェースを使用します。オペレーター画面は、ポーズの準備、ラウンド開始、4台カメラの確認、音量操作を行うゲームマスター用です。プレイヤー画面は、ラウンド前後にプレイヤーへ表示する共有ディスプレイまたはタブレット用です。
+
+Install the Python dependencies from the repository root.
+
+リポジトリのルートフォルダで、Pythonの必要ライブラリをインストールします。
+
+```bash
+pip install -r requirements.txt
+```
+
+Start the web server. By default it uses live cameras, BLE, and UDP settings from `webapp/server.py`.
+
+Webサーバーを起動します。デフォルトでは、`webapp/server.py` に設定されている実カメラ、BLE、UDP設定を使います。
+
+```bash
+python3 webapp/server.py
+```
+
+For UI testing without cameras or Arduino/BLE hardware, run in simulation mode.
+
+カメラやArduino/BLE機器なしでUIだけ確認したい場合は、シミュレーションモードで起動します。
+
+```bash
+POSERING_SIMULATION=1 python3 webapp/server.py
+```
+
+Open the operator screen on the computer used by the game master. This screen shows the four camera feeds, game setup, saved poses, marker status, BLE status, and audio controls.
+
+ゲームマスターが使うPCでは、オペレーター画面を開きます。この画面では4台のカメラ映像、ゲーム設定、保存済みポーズ、マーカー状態、BLE状態、音量操作を確認できます。
+
+```text
+http://localhost:5001/operator
+```
+
+Open the player screen on the display used by participants. This screen shows the countdown, pose name, game state, clear result, and photos after a pose is completed.
+
+参加者に見せるディスプレイでは、プレイヤー画面を開きます。この画面ではカウントダウン、ポーズ名、ゲーム状態、クリア結果、ポーズ完了後の写真を表示します。
+
+```text
+http://localhost:5001/player
+```
+
+If another device is opening the page over the same network, replace `localhost` with the main PC IP address. The server prints the available URLs and port when it starts.
+
+同じネットワーク上の別デバイスから開く場合は、`localhost` をメインPCのIPアドレスに置き換えてください。サーバー起動時に、使用できるURLとポートがターミナルに表示されます。
+
+```text
+http://<MAIN_PC_IP>:5001/operator
+http://<MAIN_PC_IP>:5001/player
+```
+
+To use a different port, set `POSERING_PORT` before starting the server.
+
+別のポートを使いたい場合は、サーバー起動前に `POSERING_PORT` を指定します。
+
+```bash
+POSERING_PORT=5011 python3 webapp/server.py
+```
+
+For the 2PC setup, start the B-set UDP sender on the sub PC first, then start the web server on the main PC. The web interface replaces the old keyboard flow for starting the game and saving/loading poses.
+
+2PC構成では、先にサブPCでBセットUDP送信プログラムを起動し、その後メインPCでWebサーバーを起動します。ゲーム開始やポーズ保存/読み込みは、従来のキーボード操作ではなくWebインターフェースから行います。
+
+```bash
+# Sub PC / サブPC
+python3 sub_bset_udp_sender.py
+
+# Main PC / メインPC
+python3 webapp/server.py
+```
+
+---
+
 ## 概要
 
 2台のカメラを用いてステレオキャリブレーションを行い、マーカーの3次元位置を計測するプログラムです。
