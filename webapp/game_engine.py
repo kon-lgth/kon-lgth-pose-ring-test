@@ -132,6 +132,8 @@ class GameEngine:
         self._clear_dist = float(diff["clear_dist_mm"])
         self._hold_time = float(diff["hold_time"])
         self._time_per_pose = float(diff["time_per_pose"])
+        if settings.get("vs_no_timeout"):
+            self._time_per_pose = 9999.0
         self._poses_per_round = int(settings.get("poses_per_round", 5))
         self._num_rounds = int(settings.get("num_rounds", 3))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
@@ -507,7 +509,11 @@ class GameEngine:
                     else "Explore. Follow the bracelet feedback."
                 )
 
-            if time_left <= 0 and ctx["game_state"] == GameState.PLAYING:
+            if (
+                time_left <= 0
+                and ctx["game_state"] == GameState.PLAYING
+                and not self._settings.get("vs_no_timeout")
+            ):
                 ctx["pose"] += 1
                 ctx["pose_result"] = "timeout"
                 ctx["game_state"] = GameState.TIME_UP

@@ -382,6 +382,33 @@ class SoundSystem {
       off += durs[i] + 0.04;
     });
   }
+
+  playWinnerDrum() {
+    if (!this.audioReady || !this.effectsEnabled) return;
+    this._ensureCtx();
+    const t = this.ctx.currentTime;
+    [0, 0.18, 0.36, 0.54, 0.76, 0.96].forEach((off, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain); this._connectEffect(gain);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(i < 4 ? 110 : 82, t + off);
+      osc.frequency.exponentialRampToValueAtTime(45, t + off + 0.16);
+      gain.gain.setValueAtTime(0.55, t + off);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + off + 0.18);
+      osc.start(t + off);
+      osc.stop(t + off + 0.2);
+    });
+  }
+
+  playWinnerMusic() {
+    if (!this.audioReady || !this.musicEnabled) return;
+    this._ensureCtx();
+    const t = this.ctx.currentTime;
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((freq, i) => {
+      this._musicNote(freq, t + i * 0.16, i === 6 ? 0.7 : 0.18, 'square', 0.12);
+    });
+  }
 }
 
 const sound = new SoundSystem();
@@ -392,6 +419,12 @@ function getPlayerText(key) {
   const lang = localStorage.getItem('poseringLanguage') === 'en' ? 'en' : 'ja';
   const table = (window.POSERING_PLAYER_TEXT && window.POSERING_PLAYER_TEXT[lang]) || {};
   return table[key] || key;
+}
+
+function formatPlayerText(key, values = {}) {
+  return getPlayerText(key).replace(/\{(\w+)\}/g, (_, name) => (
+    Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : `{${name}}`
+  ));
 }
 
 window.enablePlayerAudio = async () => {
@@ -424,6 +457,311 @@ window.confirmFinishGame = () => {
     window.location.href = '/';
   }, 150);
 };
+
+let _vsState = null;
+let _vsCountdownTimer = null;
+let _vsCountdownKey = '';
+let _vsCountdownValue = 10;
+let _vsCountdownMode = 'setup';
+let _vsResultPage = 0;
+let _vsWinnerPlayed = false;
+let _vsLastSetupCount = 0;
+let _vsChallengeReadyKey = '';
+
+function vsColorFor(name, fallback = '#1710c9') {
+  return (_vsState && _vsState.player_colors && _vsState.player_colors[name]) || fallback;
+}
+
+function vsIsRed(name) {
+  return vsColorFor(name).toLowerCase() === '#ef4444';
+}
+
+function vsBgFor(name, fallback = '#1710c9') {
+  return vsIsRed(name) ? '#c90000' : fallback;
+}
+
+function vsPills(doneCount) {
+  return `<div class="vs-status-row">${Array.from({ length: 5 }, (_, i) => (
+    `<div class="vs-status-pill ${i < doneCount ? 'done' : ''}">${i < doneCount ? 'OK!' : getPlayerText('vsPoseReady')}</div>`
+  )).join('')}</div>`;
+}
+
+function vsTopBrand() {
+  return '<div class="vs-top-brand">-PoseRing-</div>';
+}
+
+function startVsSetupCountdown(state) {
+  const key = `${state.turn_index}:${state.current_index}:${state.phase}`;
+  if (_vsCountdownKey === key && _vsCountdownTimer) return;
+  clearInterval(_vsCountdownTimer);
+  _vsCountdownKey = key;
+  _vsCountdownMode = state.current_index === 0 ? 'ready' : 'setup';
+  _vsCountdownValue = _vsCountdownMode === 'ready' ? 3 : (state.setup_seconds || 10);
+  renderVsSetupCountdown();
+  sound.playCountdownBeep(_vsCountdownValue);
+  _vsCountdownTimer = setInterval(() => {
+    _vsCountdownValue -= 1;
+    sound.playCountdownBeep(_vsCountdownValue > 0 ? _vsCountdownValue : 0);
+    if (_vsCountdownValue <= 0) {
+      if (_vsCountdownMode === 'ready') {
+        _vsCountdownMode = 'setup';
+        _vsCountdownValue = state.setup_seconds || 10;
+        sound.playCountdownBeep(0);
+        setTimeout(() => sound.playCountdownBeep(_vsCountdownValue), 180);
+        renderVsSetupCountdown();
+        return;
+      }
+      clearInterval(_vsCountdownTimer);
+      _vsCountdownTimer = null;
+      socket.emit('cmd_vs_capture_setup_pose');
+      sound.playCameraShutter();
+      return;
+    }
+    renderVsSetupCountdown();
+  }, 1000);
+}
+
+function renderVsSetupCountdown() {
+  if (!_vsState) return;
+  const creator = _vsState.creator || 'Player';
+  const creatorLabel = escapeHtml(creator);
+  const done = _vsState.current_index || 0;
+  const bg = vsBgFor(creator, '#1710c9');
+  const screen = document.getElementById('vsScreen');
+  const content = document.getElementById('vsContent');
+  screen.style.setProperty('--vs-bg', bg);
+  const label = _vsCountdownMode === 'ready'
+    ? formatPlayerText('vsSetupReady', { player: creatorLabel })
+    : formatPlayerText('vsSetupPose', { player: creatorLabel, current: done + 1, total: _vsState.poses_per_turn });
+  content.innerHTML = `
+    ${vsTopBrand()}
+    <div class="vs-count-disc">${Math.max(0, _vsCountdownValue)}</div>
+    <div class="vs-sub">${label}</div>
+    ${vsPills(done)}
+  `;
+}
+
+function startVsChallengeReadyCountdown(state) {
+  const key = `${state.turn_index}:${state.phase}`;
+  if (_vsChallengeReadyKey === key && _vsCountdownTimer) return;
+  clearInterval(_vsCountdownTimer);
+  _vsChallengeReadyKey = key;
+  _vsCountdownMode = 'challenge-ready';
+  _vsCountdownValue = 3;
+  renderVsChallengeReady(state);
+  sound.playCountdownBeep(_vsCountdownValue);
+  _vsCountdownTimer = setInterval(() => {
+    _vsCountdownValue -= 1;
+    sound.playCountdownBeep(_vsCountdownValue > 0 ? _vsCountdownValue : 0);
+    if (_vsCountdownValue <= 0) {
+      clearInterval(_vsCountdownTimer);
+      _vsCountdownTimer = null;
+      socket.emit('cmd_vs_begin_challenge_after_ready');
+      sound.playCountdownBeep(0);
+      return;
+    }
+    renderVsChallengeReady(state);
+  }, 1000);
+}
+
+function renderVsChallengeReady(state) {
+  const challenger = state.challenger || 'Player';
+  const challengerLabel = escapeHtml(challenger);
+  const screen = document.getElementById('vsScreen');
+  const content = document.getElementById('vsContent');
+  screen.style.setProperty('--vs-bg', vsBgFor(challenger, '#c90000'));
+  content.innerHTML = `
+    ${vsTopBrand()}
+    <div class="vs-count-disc">${Math.max(0, _vsCountdownValue)}</div>
+    <div class="vs-sub">${formatPlayerText('vsChallengeReady', { player: challengerLabel })}</div>
+    ${vsPills(0)}
+  `;
+}
+
+function renderVsState(state) {
+  _vsState = state || null;
+  const screen = document.getElementById('vsScreen');
+  const content = document.getElementById('vsContent');
+  const active = !!(state && state.active && state.phase !== 'idle');
+  document.body.classList.toggle('vs-active', active);
+  if (!active || !screen || !content) return;
+  screen.classList.remove('winner-mode');
+
+  if (state.phase !== 'setup' && state.phase !== 'challenge_ready') {
+    clearInterval(_vsCountdownTimer);
+    _vsCountdownTimer = null;
+    _vsCountdownKey = '';
+  }
+
+  if (state.phase === 'setup') {
+    if ((state.current_index || 0) > _vsLastSetupCount) {
+      sound.playRoundEnd();
+    }
+    _vsLastSetupCount = state.current_index || 0;
+    startVsSetupCountdown(state);
+    return;
+  }
+
+  if (state.phase === 'setup_complete') {
+    if (_vsLastSetupCount < state.poses_per_turn) sound.playRoundEnd();
+    _vsLastSetupCount = state.poses_per_turn;
+    const creator = state.creator || 'Player';
+    screen.style.setProperty('--vs-bg', vsBgFor(creator, '#1710c9'));
+    content.innerHTML = `
+      ${vsTopBrand()}
+      <div class="vs-title">${getPlayerText('vsSetupCompleteTitle')}</div>
+      <div class="vs-sub">${formatPlayerText('vsSetupCompleteText', { total: state.poses_per_turn })}</div>
+      ${vsPills(state.poses_per_turn)}
+    `;
+    return;
+  }
+
+  if (state.phase === 'challenge_ready') {
+    startVsChallengeReadyCountdown(state);
+    return;
+  }
+
+  if (state.phase === 'challenge') {
+    _vsChallengeReadyKey = '';
+    const challenger = state.challenger || 'Player';
+    const challengerLabel = escapeHtml(challenger);
+    screen.style.setProperty('--vs-bg', vsBgFor(challenger, '#c90000'));
+    const currentChallenge = Math.min((state.current_index || 0) + 1, state.poses_per_turn);
+    content.innerHTML = `
+      ${vsTopBrand()}
+      <div class="vs-title">${challengerLabel}</div>
+      <div class="vs-sub">${formatPlayerText('vsChallengeLine', { current: currentChallenge, total: state.poses_per_turn })}<br>${getPlayerText('vsTimeMeasured')}</div>
+      ${vsPills(state.current_index || 0)}
+    `;
+    return;
+  }
+
+  if (state.phase === 'turn_complete') {
+    screen.style.setProperty('--vs-bg', '#1710c9');
+    content.innerHTML = `
+      ${vsTopBrand()}
+      <div class="vs-title">${getPlayerText('vsTurnClearTitle')}</div>
+      <div class="vs-sub">${getPlayerText('vsTurnClearText')}</div>
+    `;
+    sound.playRoundEnd();
+    return;
+  }
+
+  if (state.phase === 'results') {
+    renderVsResults(state);
+  }
+}
+
+function imgTag(src) {
+  return src ? `<img class="vs-photo" src="data:image/jpeg;base64,${src}" alt="pose photo">` : `<div class="vs-photo"></div>`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function vsWinnerDots() {
+  const dots = [
+    ['#ff8fa1', '7%', '14%', '16px', '5.2s', '-0.3s'],
+    ['#78d6ff', '15%', '73%', '14px', '6.1s', '-2.1s'],
+    ['#9dff96', '22%', '30%', '20px', '5.7s', '-1.2s'],
+    ['#fff176', '30%', '84%', '12px', '6.8s', '-3.0s'],
+    ['#ff8fa1', '42%', '18%', '10px', '7.2s', '-0.8s'],
+    ['#78d6ff', '51%', '78%', '18px', '5.5s', '-2.8s'],
+    ['#9dff96', '61%', '10%', '13px', '6.6s', '-1.6s'],
+    ['#fff176', '70%', '66%', '16px', '5.9s', '-3.5s'],
+    ['#ff8fa1', '82%', '26%', '14px', '7.4s', '-2.4s'],
+    ['#78d6ff', '90%', '58%', '21px', '6.3s', '-1.0s'],
+    ['#9dff96', '94%', '82%', '12px', '5.4s', '-3.8s'],
+    ['#fff176', '8%', '91%', '10px', '7.1s', '-1.7s'],
+    ['#ff8fa1', '76%', '88%', '11px', '5.8s', '-0.5s'],
+    ['#78d6ff', '36%', '8%', '9px', '6.9s', '-2.6s'],
+  ];
+  return `<div class="vs-winner-dots" aria-hidden="true">${
+    dots.map(([c, x, y, s, d, delay]) =>
+      `<span class="vs-winner-dot" style="--c:${c};--x:${x};--y:${y};--s:${s};--d:${d};--delay:${delay};"></span>`
+    ).join('')
+  }</div>`;
+}
+
+function renderVsResults(state) {
+  const screen = document.getElementById('vsScreen');
+  const content = document.getElementById('vsContent');
+  const turns = state.turns || [];
+  if (turns.length < 2) {
+    content.innerHTML = `${vsTopBrand()}<div class="vs-title">${getPlayerText('vsResultsTitle')}</div>`;
+    return;
+  }
+  const maxPages = state.poses_per_turn || 5;
+  if (_vsResultPage >= maxPages) {
+    renderVsWinner(state);
+    return;
+  }
+  screen.style.setProperty('--vs-bg', '#111');
+  const page = _vsResultPage;
+  const cols = turns.map(turn => {
+    const setup = (turn.setup || [])[page] || {};
+    const done = (turn.challenge || [])[page] || {};
+    const challenger = turn.challenger || 'Player';
+    return `
+      <div class="vs-column" style="--col-bg:${vsBgFor(challenger, '#1710c9')}">
+        <div class="vs-title" style="font-size:clamp(1.4rem,3vw,2.8rem);">${escapeHtml(challenger)}</div>
+        <div class="vs-time">⏱ ${formatPlayerText('vsLapTime', { time: (done.lap_time || 0).toFixed(1) })}</div>
+        ${imgTag(setup.photo)}
+        <div class="vs-arrow"></div>
+        ${imgTag(done.photo)}
+      </div>
+    `;
+  }).join('<div class="vs-divider"></div>');
+  content.innerHTML = `
+    ${vsTopBrand()}
+    <div class="vs-compare">${cols}</div>
+    <button class="vs-small-btn" onclick="nextVsResultPage()">${getPlayerText('vsNext')}</button>
+  `;
+}
+
+window.nextVsResultPage = () => {
+  _vsResultPage += 1;
+  renderVsResults(_vsState);
+};
+
+function renderVsWinner(state) {
+  const turns = state.turns || [];
+  const winnerTurn = [...turns].sort((a, b) => (a.total_time || 999999) - (b.total_time || 999999))[0];
+  const winner = winnerTurn.challenger || 'Player';
+  const winnerLabel = escapeHtml(winner);
+  const photos = (winnerTurn.challenge || []).map(p => p.photo).filter(Boolean);
+  const picks = [photos[0], photos[Math.min(photos.length - 1, 2)]].filter(Boolean);
+  const screen = document.getElementById('vsScreen');
+  const content = document.getElementById('vsContent');
+  screen.style.setProperty('--vs-bg', vsBgFor(winner, '#1710c9'));
+  screen.classList.add('winner-mode');
+  if (!_vsWinnerPlayed) {
+    _vsWinnerPlayed = true;
+    sound.playWinnerDrum();
+    setTimeout(() => sound.playWinnerMusic(), 1200);
+  }
+  content.innerHTML = `
+    ${vsTopBrand()}
+    ${vsWinnerDots()}
+    <div class="vs-winner-layout vs-winner-reveal">
+      <div class="vs-winner-kicker">${getPlayerText('vsWinner')}</div>
+      <div class="vs-title vs-winner-title">${getPlayerText('vsCongratulations')}</div>
+      <div class="vs-winner-name">${winnerLabel}</div>
+      <div class="vs-winner-time">${formatPlayerText('vsWinnerTime', { time: (winnerTurn.total_time || 0).toFixed(1) })}</div>
+      <div class="vs-winner-photos">${picks.map(imgTag).join('')}</div>
+      <div class="vs-winner-actions">
+        <button class="vs-small-btn" onclick="openFinishModal()">${getPlayerText('finishConfirm')}</button>
+      </div>
+    </div>
+  `;
+}
 
 
 /* ═══════════════════════════════════════════
@@ -471,6 +809,9 @@ window.confirmFinishGame = () => {
 const COLOR_LABEL = {
   RED: '🔴 R.ARM', YELLOW: '🟡 L.ARM', BLUE: '🔵 R.LEG', GREEN: '🟢 L.LEG'
 };
+const COLOR_NAME_KEY = {
+  RED: 'colorRed', YELLOW: 'colorYellow', BLUE: 'colorBlue', GREEN: 'colorGreen'
+};
 
 function buildProxRings() {
   const wrap = document.getElementById('proxRings');
@@ -487,7 +828,7 @@ function buildProxRings() {
         </svg>
         <div class="prox-dot" id="dot-${color}"></div>
       </div>
-      <div class="prox-label">${COLOR_LABEL[color]}</div>
+      <div class="prox-label" id="label-${color}">${COLOR_LABEL[color]}</div>
     `;
     wrap.appendChild(card);
   });
@@ -496,9 +837,16 @@ buildProxRings();
 
 const CIRCUMFERENCE = 2 * Math.PI * 32;
 
-function updateProxRing(color, proximity) {
+function colorIsConnected(colorState) {
+  if (!colorState) return false;
+  const source = String(colorState.source || '').toUpperCase();
+  return Boolean(colorState.current || (source && source !== 'NO DATA'));
+}
+
+function updateProxRing(color, proximity, colorState = null) {
   const arc = document.getElementById(`arc-${color}`);
   const dot = document.getElementById(`dot-${color}`);
+  const label = document.getElementById(`label-${color}`);
   if (!arc || !dot) return;
 
   arc.style.strokeDashoffset = CIRCUMFERENCE * (1 - proximity);
@@ -512,6 +860,19 @@ function updateProxRing(color, proximity) {
     dot.style.boxShadow = proximity > 0.5
       ? `0 0 ${proximity * 20}px currentColor`
       : 'none';
+  }
+
+  if (label) {
+    const isVsPrep = document.body.classList.contains('vs-prep');
+    if (isVsPrep) {
+      const connected = colorIsConnected(colorState);
+      label.innerHTML = `
+        ${getPlayerText(COLOR_NAME_KEY[color])}
+        <span class="prox-status ${connected ? 'connected' : 'disconnected'}">${getPlayerText(connected ? 'connected' : 'notConnected')}</span>
+      `;
+    } else {
+      label.textContent = COLOR_LABEL[color];
+    }
   }
 }
 
@@ -574,11 +935,17 @@ function buildScoreCards(players, scores, currentPlayer = null, playerColors = {
 function updateTurnBanner(currentPlayer, players = [], playerColors = {}, gameState = 'IDLE') {
   const banner = document.getElementById('turnBanner');
   const nameEl = document.getElementById('turnName');
+  const labelEl = banner ? banner.querySelector('.turn-label') : null;
   if (!banner || !nameEl) return;
   const shouldShow = Boolean(currentPlayer) && !['GAME_OVER', 'GAME_CLEAR', 'ROUND_END'].includes(gameState);
   banner.classList.toggle('show', shouldShow);
   if (!shouldShow) return;
   banner.style.setProperty('--turn-color', getPlayerColor(currentPlayer, players, playerColors));
+  if (labelEl) {
+    labelEl.textContent = document.body.classList.contains('vs-prep')
+      ? getPlayerText('startingPlayer')
+      : 'CURRENT PLAYER';
+  }
   nameEl.textContent = currentPlayer;
 }
 
@@ -797,6 +1164,13 @@ function applyState(state) {
   _latestState = state;
   const gs     = state.game_state;
   const colors = state.colors || {};
+  const isVsOperatorWait = Boolean(
+    gs === 'IDLE' &&
+    _lobbySetup &&
+    _lobbySetup.status === 'ready_for_operator' &&
+    _lobbySetup.type === 'versus'
+  );
+  document.body.classList.toggle('vs-prep', isVsOperatorWait);
   const lobbyPlayers = (_lobbySetup && Array.isArray(_lobbySetup.players)) ? _lobbySetup.players : [];
   const activePlayers = (gs === 'IDLE' && lobbyPlayers.length) ? lobbyPlayers : (state.players || []);
   const playerColors = Object.assign(
@@ -815,7 +1189,7 @@ function applyState(state) {
     sound.updateProximity(colors);
   }
   COLOR_ORDER.forEach(c => {
-    updateProxRing(c, (colors[c] && colors[c].proximity) || 0);
+    updateProxRing(c, (colors[c] && colors[c].proximity) || 0, colors[c]);
   });
 
   // ── Timer ──
@@ -834,11 +1208,18 @@ function applyState(state) {
   // ── Status message ──
   const smEl = document.getElementById('statusMsg');
   if (smEl) {
-    smEl.textContent = (
-      gs === 'IDLE' && _lobbySetup && _lobbySetup.status === 'ready_for_operator'
-    )
-      ? `Waiting for operator to start ${(_lobbySetup.type || 'multiplayer').toUpperCase()}`
-      : (state.message || '');
+    if (isVsOperatorWait) {
+      smEl.innerHTML = `
+        ${getPlayerText('areYouReady')}
+        <span class="status-sub">${getPlayerText('waitingOperatorStart')}</span>
+      `;
+    } else {
+      smEl.textContent = (
+        gs === 'IDLE' && _lobbySetup && _lobbySetup.status === 'ready_for_operator'
+      )
+        ? `Waiting for operator to start ${(_lobbySetup.type || 'multiplayer').toUpperCase()}`
+        : (state.message || '');
+    }
     smEl.style.color =
       gs === 'GAME_OVER'   ? '#ef4444' :
       gs === 'GAME_CLEAR'  ? '#facc15' :
@@ -924,8 +1305,16 @@ socket.on('lobby_setup', setup => {
   if (_latestState) applyState(_latestState);
 });
 
+socket.on('vs_state', state => {
+  renderVsState(state);
+});
+
 /* One-shot snapshot event: show result overlay with photos */
 socket.on('snapshot_event', ev => {
   console.log('[Player] snapshot_event', ev.result);
+  if (_vsState && _vsState.active && _vsState.phase === 'challenge') {
+    if (ev.result === 'cleared') sound.playVictoryFanfare();
+    return;
+  }
   showResultOverlay(ev.result, ev);
 });

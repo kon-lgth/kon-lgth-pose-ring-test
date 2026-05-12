@@ -127,6 +127,20 @@ PREPARED_GAME = {
 }
 
 POSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poses.json")
+COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
+VS_POSES_PER_TURN = 5
+VS_SETUP_SECONDS = 10
+
+VS_SESSION = {
+    "active": False,
+    "phase": "idle",
+    "players": [],
+    "player_colors": {},
+    "turn_index": 0,
+    "current_index": 0,
+    "turns": [],
+    "message": "",
+}
 
 
 def configure_runtime_logging():
@@ -159,6 +173,195 @@ def _find_pose(pose_id):
             return pose
     return None
 
+
+def _front_camera_b64():
+    jpeg = engine.get_frame(0)
+    if not jpeg:
+        return None
+    import base64
+    return base64.b64encode(jpeg).decode("ascii")
+
+
+def _snapshot_has_all_colors(snapshot):
+    sets = (snapshot or {}).get("sets") or {}
+    if not sets:
+        return False
+    for color in COLOR_ORDER:
+        found = False
+        for points in sets.values():
+            if isinstance(points, dict) and points.get(color) is not None:
+                found = True
+                break
+        if not found:
+            return False
+    return True
+
+
+def _current_vs_players():
+    players = VS_SESSION.get("players") or PREPARED_GAME.get("players") or ["Player 1", "Player 2"]
+    if len(players) < 2:
+        players = (players + ["Player 2"])[:2]
+    return players[:2]
+
+
+def _vs_turn_context():
+    players = _current_vs_players()
+    turn_index = int(VS_SESSION.get("turn_index", 0)) % 2
+    creator = players[turn_index]
+    challenger = players[1 - turn_index]
+    return players, creator, challenger
+
+
+def _public_vs_state(extra=None):
+    players, creator, challenger = _vs_turn_context()
+    state = {
+        "active": VS_SESSION.get("active", False),
+        "phase": VS_SESSION.get("phase", "idle"),
+        "players": players,
+        "player_colors": VS_SESSION.get("player_colors", {}),
+        "turn_index": VS_SESSION.get("turn_index", 0),
+        "current_index": VS_SESSION.get("current_index", 0),
+        "poses_per_turn": VS_POSES_PER_TURN,
+        "setup_seconds": VS_SETUP_SECONDS,
+        "creator": creator,
+        "challenger": challenger,
+        "turns": VS_SESSION.get("turns", []),
+        "message": VS_SESSION.get("message", ""),
+    }
+    if extra:
+        state.update(extra)
+    return state
+
+
+def _emit_vs(extra=None):
+    socketio.emit("vs_state", _public_vs_state(extra))
+
+
+def _start_vs_setup(turn_index=None):
+    if turn_index is not None:
+        VS_SESSION["turn_index"] = int(turn_index)
+    players, creator, challenger = _vs_turn_context()
+    while len(VS_SESSION["turns"]) <= VS_SESSION["turn_index"]:
+        VS_SESSION["turns"].append({
+            "creator": creator,
+            "challenger": challenger,
+            "setup": [],
+            "challenge": [],
+            "total_time": None,
+        })
+    turn = VS_SESSION["turns"][VS_SESSION["turn_index"]]
+    turn.update({"creator": creator, "challenger": challenger, "setup": [], "challenge": [], "total_time": None})
+    VS_SESSION.update({
+        "active": True,
+        "phase": "setup",
+        "current_index": 0,
+        "message": f"{creator} sets poses. {challenger} hides.",
+    })
+    _emit_vs()
+
+
+def _start_vs_challenge():
+    players, creator, challenger = _vs_turn_context()
+    turn = VS_SESSION["turns"][VS_SESSION["turn_index"]]
+    if len(turn.get("setup", [])) < VS_POSES_PER_TURN:
+        VS_SESSION["message"] = "Set all poses before starting the challenge."
+        _emit_vs({"error": VS_SESSION["message"]})
+        return
+
+    VS_SESSION.update({
+        "phase": "challenge_ready",
+        "current_index": 0,
+        "message": f"{challenger} get ready. Time starts after countdown.",
+    })
+    _emit_vs()
+
+
+def _begin_vs_challenge_after_ready():
+    players, creator, challenger = _vs_turn_context()
+    turn = VS_SESSION["turns"][VS_SESSION["turn_index"]]
+    VS_SESSION.update({
+        "phase": "challenge",
+        "current_index": 0,
+        "message": f"{challenger} challenge. Time is being measured.",
+        "challenge_started_at": time.time(),
+        "lap_started_at": time.time(),
+    })
+    first_pose = turn["setup"][0]["pose"]
+    engine.send_command("load_pose", first_pose)
+    engine.send_command("start_game", _vs_engine_settings([challenger]))
+    _emit_vs()
+
+
+def _vs_engine_settings(players):
+    return {
+        "players": players,
+        "player_colors": VS_SESSION.get("player_colors", {}),
+        "difficulty": "medium",
+        "poses_per_round": VS_POSES_PER_TURN,
+        "num_rounds": 1,
+        "simulation": CONFIG["simulation"],
+        "a_cam0_index": CONFIG["a_cam0_index"],
+        "a_cam1_index": CONFIG["a_cam1_index"],
+        "a_backend": CONFIG["a_backend"],
+        "a_calib_file": CONFIG["a_calib_file"],
+        "use_b_set": CONFIG["use_b_set"],
+        "use_remote_b_set": CONFIG["use_remote_b_set"],
+        "b_cam0_index": CONFIG["b_cam0_index"],
+        "b_cam1_index": CONFIG["b_cam1_index"],
+        "b_backend": CONFIG["b_backend"],
+        "b_calib_file": CONFIG["b_calib_file"],
+        "remote_b_udp_ip": CONFIG["remote_b_udp_ip"],
+        "remote_b_udp_port": CONFIG["remote_b_udp_port"],
+        "ble_enabled": CONFIG["ble_enabled"],
+        "ble_device_name": CONFIG["ble_device_name"],
+        "ble_char_uuid": CONFIG["ble_char_uuid"],
+        "feedback_target_color": CONFIG["feedback_target_color"],
+        "vs_no_timeout": True,
+    }
+
+
+def _record_vs_challenge_clear(snap):
+    turn_index = VS_SESSION.get("turn_index", 0)
+    if turn_index >= len(VS_SESSION.get("turns", [])):
+        return
+    turn = VS_SESSION["turns"][turn_index]
+    idx = int(VS_SESSION.get("current_index", 0))
+    now = time.time()
+    lap = max(0.0, now - float(VS_SESSION.get("lap_started_at", now)))
+    turn.setdefault("challenge", []).append({
+        "index": idx,
+        "photo": snap.get("cam0") or _front_camera_b64(),
+        "lap_time": lap,
+        "cleared_at": now,
+    })
+    VS_SESSION["current_index"] = idx + 1
+
+    if VS_SESSION["current_index"] >= VS_POSES_PER_TURN:
+        turn["total_time"] = max(0.0, now - float(VS_SESSION.get("challenge_started_at", now)))
+        if VS_SESSION.get("turn_index", 0) == 0:
+            VS_SESSION.update({
+                "phase": "turn_complete",
+                "message": "First VS turn complete. Press START for the second setup.",
+                "turn_index": 1,
+                "current_index": 0,
+            })
+        else:
+            VS_SESSION.update({
+                "phase": "results",
+                "message": "VS results ready.",
+                "current_index": 0,
+            })
+        engine.send_command("reset")
+        _emit_vs()
+        return
+
+    next_pose = turn["setup"][VS_SESSION["current_index"]]["pose"]
+    VS_SESSION["lap_started_at"] = time.time()
+    engine.send_command("next_pose")
+    engine.send_command("load_pose", next_pose)
+    engine.send_command("start_game", _vs_engine_settings([turn["challenger"]]))
+    _emit_vs()
+
 # ---------------------------------------------------------------------------
 # Background broadcaster — pushes state to all clients at ~20 Hz
 # ---------------------------------------------------------------------------
@@ -173,6 +376,12 @@ def broadcaster():
         # One-shot snapshot event (sent once when a pose ends)
         snap = engine.pop_snapshot_event()
         if snap:
+            if (
+                VS_SESSION.get("active")
+                and VS_SESSION.get("phase") == "challenge"
+                and snap.get("result") == "cleared"
+            ):
+                _record_vs_challenge_clear(snap)
             socketio.emit("snapshot_event", snap)
 
         socketio.emit("game_state", state)
@@ -329,6 +538,7 @@ def on_connect():
     emit("audio_settings", AUDIO_SETTINGS)
     emit("pose_library", _load_poses())
     emit("lobby_setup", PREPARED_GAME)
+    emit("vs_state", _public_vs_state())
 
 
 @socketio.on("cmd_prepare_game")
@@ -358,6 +568,23 @@ def on_start_game(data):
     data: {players, difficulty, poses_per_round, num_rounds}
     """
     data = data or {}
+    if PREPARED_GAME.get("type") == "versus":
+        if not VS_SESSION.get("active") or VS_SESSION.get("phase") in {"idle"}:
+            VS_SESSION.update({
+                "players": PREPARED_GAME.get("players", ["Player 1", "Player 2"]),
+                "player_colors": PREPARED_GAME.get("player_colors", {}),
+                "turn_index": 0,
+                "turns": [],
+            })
+            _start_vs_setup(0)
+            return
+        if VS_SESSION.get("phase") == "setup_complete":
+            _start_vs_challenge()
+            return
+        if VS_SESSION.get("phase") == "turn_complete":
+            _start_vs_setup(VS_SESSION.get("turn_index", 1))
+            return
+
     players = [p.strip() for p in data.get("players", PREPARED_GAME.get("players") or ["Player 1"]) if p.strip()]
     if not players:
         players = PREPARED_GAME.get("players") or ["Player 1"]
@@ -407,6 +634,16 @@ def on_set_targets():
 
 @socketio.on("cmd_reset")
 def on_reset():
+    VS_SESSION.update({
+        "active": False,
+        "phase": "idle",
+        "players": [],
+        "player_colors": {},
+        "turn_index": 0,
+        "current_index": 0,
+        "turns": [],
+        "message": "",
+    })
     PREPARED_GAME.update({
         "mode": None,
         "type": None,
@@ -416,7 +653,53 @@ def on_reset():
         "status": "idle",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)
+    _emit_vs()
     engine.send_command("reset")
+
+
+@socketio.on("cmd_vs_capture_setup_pose")
+def on_vs_capture_setup_pose():
+    if not VS_SESSION.get("active") or VS_SESSION.get("phase") != "setup":
+        return
+    turn_index = VS_SESSION.get("turn_index", 0)
+    if turn_index >= len(VS_SESSION.get("turns", [])):
+        return
+    snapshot = engine.get_current_pose_snapshot()
+    if not _snapshot_has_all_colors(snapshot):
+        VS_SESSION["message"] = "Cannot save pose: all colors must be visible."
+        _emit_vs({"error": VS_SESSION["message"], "capture_ok": False})
+        return
+    idx = int(VS_SESSION.get("current_index", 0))
+    pose = {
+        "id": f"vs-{uuid.uuid4().hex}",
+        "name": f"VS Pose {idx + 1}",
+        "difficulty": "medium",
+        "created_at": time.time(),
+        "sets": snapshot["sets"],
+        "source": snapshot.get("source", "live"),
+    }
+    VS_SESSION["turns"][turn_index].setdefault("setup", []).append({
+        "index": idx,
+        "pose": pose,
+        "photo": _front_camera_b64(),
+        "saved_at": time.time(),
+    })
+    VS_SESSION["current_index"] = idx + 1
+    if VS_SESSION["current_index"] >= VS_POSES_PER_TURN:
+        VS_SESSION.update({
+            "phase": "setup_complete",
+            "message": "All setup poses saved. Press START when the challenger is ready.",
+        })
+    else:
+        VS_SESSION["message"] = f"Pose {idx + 1} saved."
+    _emit_vs({"capture_ok": True})
+
+
+@socketio.on("cmd_vs_begin_challenge_after_ready")
+def on_vs_begin_challenge_after_ready():
+    if not VS_SESSION.get("active") or VS_SESSION.get("phase") != "challenge_ready":
+        return
+    _begin_vs_challenge_after_ready()
 
 
 @socketio.on("cmd_next_pose")
