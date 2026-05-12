@@ -1,6 +1,6 @@
 # PoseRing: A 3D Exploration Game
 
-<img width="2826" height="1592" alt="image" src="https://github.com/user-attachments/assets/69845a69-7b99-426c-aa8f-f52ea088ad11" />
+<img width="1424" height="830" alt="Captura de pantalla 2026-05-12 a la(s) 10 13 11 a m" src="https://github.com/user-attachments/assets/a1dd86d2-25b4-4372-9e68-1d6ca031a2a6" />
 
 [English version](README_en.md)
 
