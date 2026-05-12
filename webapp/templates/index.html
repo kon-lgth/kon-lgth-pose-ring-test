@@ -60,12 +60,14 @@
     }
 
     .operator-link,
+    .back-button,
     .language-menu,
     .volume-menu {
       pointer-events: auto;
     }
 
-    .operator-link {
+    .operator-link,
+    .back-button {
       color: var(--welcome-ink);
       border: 2px solid var(--welcome-ink);
       border-radius: 999px;
@@ -75,6 +77,27 @@
       font-size: clamp(0.45rem, 0.82vw, 0.62rem);
       background: rgba(255, 255, 255, 0.78);
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .left-tools {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.6rem;
+      pointer-events: none;
+    }
+
+    .back-button {
+      display: none;
+      cursor: pointer;
+      min-width: 86px;
+      text-align: center;
+    }
+
+    .welcome-stage.multiplayer-open .back-button,
+    .welcome-stage.setup-open .back-button,
+    .welcome-stage.janken-open .back-button {
+      display: inline-block;
     }
 
     .language-menu {
@@ -467,7 +490,7 @@
     .welcome-stage.setup-open,
     .welcome-stage.janken-open {
       grid-template-rows: 1fr;
-      padding-top: clamp(4.5rem, 7vh, 5.5rem);
+      padding-top: clamp(3.8rem, 6vh, 5rem);
     }
 
     .welcome-stage.setup-open .title-lockup,
@@ -573,6 +596,10 @@
       gap: clamp(0.55rem, 1.35vh, 1rem);
     }
 
+    .staff-setup-stage.single-setup {
+      gap: clamp(0.45rem, 1vh, 0.75rem);
+    }
+
     .setup-title {
       font-family: var(--font-en);
       font-size: clamp(1.1rem, 2vw, 1.8rem);
@@ -633,11 +660,30 @@
       object-fit: contain;
     }
 
+    .staff-setup-stage.single-setup .front-camera-card {
+      width: min(560px, 60vw);
+    }
+
+    .staff-setup-stage.single-setup .front-camera-feed {
+      height: clamp(180px, 30vh, 315px);
+    }
+
     .player-assignment {
       display: grid;
       grid-template-columns: repeat(2, minmax(220px, 1fr));
       gap: clamp(1rem, 3vw, 2rem);
       width: min(620px, 66vw);
+    }
+
+    .player-assignment.single-player {
+      grid-template-columns: minmax(260px, 1fr) auto;
+      align-items: end;
+      width: min(560px, 60vw);
+      gap: clamp(1rem, 2vw, 1.4rem);
+    }
+
+    [hidden] {
+      display: none !important;
     }
 
     .player-field {
@@ -689,6 +735,51 @@
       box-shadow: 0 8px 0 rgba(0, 0, 0, 0.10);
     }
 
+    .color-choice {
+      display: grid;
+      gap: 0.55rem;
+      color: #111;
+      font-family: var(--font-en);
+      font-size: clamp(0.5rem, 0.85vw, 0.7rem);
+    }
+
+    html[lang="ja"] .color-choice {
+      font-family: var(--font-ja);
+      font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+    }
+
+    .color-options {
+      display: flex;
+      gap: 0.65rem;
+      align-items: center;
+    }
+
+    .color-option {
+      width: 58px;
+      height: 46px;
+      border: 3px solid #111;
+      border-radius: 999px;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 7px 0 rgba(0, 0, 0, 0.10);
+      position: relative;
+    }
+
+    .color-option::before {
+      content: "";
+      position: absolute;
+      inset: 9px 15px;
+      border-radius: 999px;
+      background: var(--choice-color);
+      box-shadow: 0 0 14px var(--choice-color);
+    }
+
+    .color-option.selected {
+      background: #111;
+      transform: translateY(3px);
+      box-shadow: 0 4px 0 rgba(0, 0, 0, 0.12);
+    }
+
     .setup-confirm {
       border: 0;
       border-radius: 50%;
@@ -711,11 +802,12 @@
       display: none;
       position: relative;
       z-index: 2;
-      width: min(1100px, 90vw);
+      width: min(920px, 88vw);
+      max-height: calc(100vh - 8rem);
       background: #1e1e1e;
       color: #fff;
-      padding: clamp(1.2rem, 2.2vw, 2rem);
-      gap: clamp(1rem, 2.8vh, 2rem);
+      padding: clamp(0.75rem, 1.6vw, 1.35rem);
+      gap: clamp(0.55rem, 1.5vh, 1rem);
       justify-items: center;
       box-shadow: 0 22px 44px rgba(0, 0, 0, 0.14);
     }
@@ -726,15 +818,15 @@
       color: #000;
       display: grid;
       grid-template-rows: 1fr auto;
-      min-height: clamp(360px, 58vh, 600px);
+      min-height: clamp(260px, 48vh, 480px);
     }
 
     .janken-hands {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: clamp(2rem, 5vw, 5rem);
-      font-size: clamp(4rem, 10vw, 9rem);
+      gap: clamp(1.4rem, 4vw, 4rem);
+      font-size: clamp(3.2rem, 8vw, 7rem);
       line-height: 1;
       filter: grayscale(1) contrast(2);
     }
@@ -765,15 +857,15 @@
       color: #fff;
       text-align: center;
       font-family: var(--font-ja);
-      font-size: clamp(1.4rem, 2.8vw, 2.5rem);
+      font-size: clamp(1.2rem, 2.2vw, 2rem);
       line-height: 1.35;
-      padding: 1.2rem 1rem 1.35rem;
+      padding: 0.9rem 1rem 1rem;
     }
 
     .janken-sub,
     .janken-result {
       font-family: var(--font-en);
-      font-size: clamp(0.8rem, 1.4vw, 1.25rem);
+      font-size: clamp(0.68rem, 1.15vw, 1rem);
       line-height: 1.7;
       text-align: center;
     }
@@ -877,6 +969,10 @@
         max-width: 42vw;
         line-height: 1.5;
       }
+      .back-button {
+        max-width: 42vw;
+        line-height: 1.5;
+      }
       .language-menu {
         width: min(250px, 56vw);
         grid-template-columns: 1fr 126px;
@@ -929,15 +1025,23 @@
         grid-template-columns: 1fr;
         gap: 0.55rem;
       }
+      .player-assignment.single-player {
+        grid-template-columns: minmax(0, 1fr) auto;
+        width: min(620px, 88vw);
+      }
+      .staff-setup-stage.single-setup .front-camera-card {
+        width: min(620px, 88vw);
+      }
       .janken-stage {
         width: min(620px, 92vw);
-        padding: 0.8rem;
+        max-height: calc(100svh - 7rem);
+        padding: 0.65rem;
       }
       .janken-board {
-        min-height: 48svh;
+        min-height: 42svh;
       }
       .janken-hands {
-        font-size: clamp(3rem, 16vw, 5rem);
+        font-size: clamp(2.8rem, 14vw, 4.8rem);
       }
       .press-start,
       .mode-button {
@@ -952,7 +1056,10 @@
 <body>
   <main class="welcome-stage" id="welcomeStage">
     <div class="screen-tools">
-      <a class="operator-link" href="/operator" data-i18n="operatorScreen">オペレーター画面</a>
+      <div class="left-tools">
+        <a class="operator-link" href="/operator" data-i18n="operatorScreen">オペレーター画面</a>
+        <button class="back-button" id="backButton" type="button" data-i18n="backButton">BACK</button>
+      </div>
       <div class="language-menu" id="languageMenu">
         <span data-i18n="languageLabel">言語</span>
         <button class="language-button" id="languageButton" type="button" aria-haspopup="listbox" aria-expanded="false">日本語</button>
@@ -1038,10 +1145,17 @@
           <span class="player-color-chip player-one" data-i18n="player1Label">プレイヤー1</span>
           <input type="text" id="setupPlayer1" value="Player 1"/>
         </label>
-        <label class="player-field">
+        <label class="player-field" id="setupPlayer2Field">
           <span class="player-color-chip player-two" data-i18n="player2Label">プレイヤー2</span>
           <input type="text" id="setupPlayer2" value="Player 2"/>
         </label>
+        <div class="color-choice" id="singleColorChoice" hidden>
+          <span data-i18n="preferredColor">Color</span>
+          <div class="color-options">
+            <button class="color-option selected" type="button" data-player-color="#2563eb" style="--choice-color:#2563eb;" aria-label="Blue"></button>
+            <button class="color-option" type="button" data-player-color="#ef4444" style="--choice-color:#ef4444;" aria-label="Red"></button>
+          </div>
+        </div>
       </div>
       <button class="setup-confirm" id="setupConfirmBtn" type="button" data-i18n="confirmReady">OK!</button>
     </section>
@@ -1072,6 +1186,7 @@
         multiplayer: 'Multiplayer',
         operatorScreen: 'Operator Screen',
         playerScreen: 'Player Screen',
+        backButton: 'BACK',
         volumeLabel: 'Volume',
         bgmLabel: 'BGM',
         sfxLabel: 'SFX',
@@ -1079,9 +1194,12 @@
         versusMode: 'VS',
         staffSetupTitle: 'Device Check',
         staffSetupHint: 'Confirm both players are wearing the devices correctly and visible to the camera.',
+        singleStaffSetupHint: 'Confirm the player is wearing the device correctly and visible to the camera.',
         frontCameraLabel: 'Front Camera',
+        playerNameLabel: 'Name',
         player1Label: 'Player 1',
         player2Label: 'Player 2',
+        preferredColor: 'Color',
         confirmReady: 'OK',
         jankenMain: 'Use Jan Ken Po to decide who goes first.',
         jankenSub: 'Determine who goes first and second.',
@@ -1095,6 +1213,7 @@
         multiplayer: 'みんなで',
         operatorScreen: 'オペレーター画面',
         playerScreen: 'プレイヤー画面',
+        backButton: 'もどる',
         volumeLabel: '音量',
         bgmLabel: 'BGM',
         sfxLabel: '効果音',
@@ -1102,9 +1221,12 @@
         versusMode: 'たいせん',
         staffSetupTitle: 'デバイスチェック',
         staffSetupHint: 'ふたりのデバイスが正しく装着され、カメラで見えていることを確認してください。',
+        singleStaffSetupHint: 'デバイスが正しく装着され、カメラで見えていることを確認してください。',
         frontCameraLabel: '正面カメラ',
+        playerNameLabel: 'なまえ',
         player1Label: 'プレイヤー1',
         player2Label: 'プレイヤー2',
+        preferredColor: '色',
         confirmReady: 'OK!',
         jankenMain: 'じゃんけんで先攻・後攻をきめよう！',
         jankenSub: 'Determine who goes first and second.',
@@ -1115,6 +1237,8 @@
     let translations = fallbackTranslations;
     const socket = io();
     let selectedMultiplayerType = 'coop';
+    let selectedGameMode = 'multiplayer';
+    let selectedSingleColor = '#2563eb';
     let jankenTimer = null;
     let pendingJankenFirstIndex = null;
     const audioSettings = {
@@ -1293,6 +1417,13 @@
       });
     }
 
+    function setI18nKey(el, key) {
+      if (!el) return;
+      el.dataset.i18n = key;
+      const table = translations[document.documentElement.lang] || translations.ja;
+      if (table[key]) el.textContent = table[key];
+    }
+
     async function loadTranslations() {
       try {
         const res = await fetch('/static/i18n/welcome.json', { cache: 'no-store' });
@@ -1317,16 +1448,74 @@
       welcomeAudio.click();
       closeLanguageMenu();
       closeVolumeMenu();
-      document.getElementById('welcomeStage').classList.add('multiplayer-open');
+      const stage = document.getElementById('welcomeStage');
+      stage.classList.remove('setup-open', 'janken-open');
+      stage.classList.add('multiplayer-open');
     }
 
     function showStaffSetup(event) {
       event.preventDefault();
       welcomeAudio.click();
+      selectedGameMode = 'multiplayer';
       selectedMultiplayerType = event.currentTarget.dataset.multiplayerType || 'coop';
+      configureSetupForMode('multiplayer');
       const stage = document.getElementById('welcomeStage');
       stage.classList.remove('multiplayer-open', 'janken-open');
       stage.classList.add('setup-open');
+    }
+
+    function showSinglePlayerSetup(event) {
+      event.preventDefault();
+      welcomeAudio.click();
+      closeLanguageMenu();
+      closeVolumeMenu();
+      selectedGameMode = 'single';
+      configureSetupForMode('single');
+      const stage = document.getElementById('welcomeStage');
+      stage.classList.remove('multiplayer-open', 'janken-open');
+      stage.classList.add('setup-open');
+    }
+
+    function configureSetupForMode(mode) {
+      const assignment = document.querySelector('.player-assignment');
+      const setupStage = document.getElementById('staffSetupStage');
+      const player1Label = document.querySelector('label.player-field:first-child');
+      const player2Label = document.getElementById('setupPlayer2Field');
+      const player1Text = document.querySelector('label.player-field:first-child .player-color-chip');
+      const hint = document.querySelector('.setup-hint');
+      const colorChoice = document.getElementById('singleColorChoice');
+      setupStage.classList.toggle('single-setup', mode === 'single');
+      assignment.classList.toggle('single-player', mode === 'single');
+      if (player1Label) player1Label.hidden = false;
+      if (player2Label) player2Label.hidden = mode === 'single';
+      if (colorChoice) colorChoice.hidden = mode !== 'single';
+      setI18nKey(player1Text, mode === 'single' ? 'playerNameLabel' : 'player1Label');
+      setI18nKey(hint, mode === 'single' ? 'singleStaffSetupHint' : 'staffSetupHint');
+      if (player1Text) player1Text.style.setProperty('--player-color', mode === 'single' ? selectedSingleColor : '#2563eb');
+    }
+
+    function backFromCurrentScreen() {
+      welcomeAudio.click();
+      closeLanguageMenu();
+      closeVolumeMenu();
+      clearInterval(jankenTimer);
+      pendingJankenFirstIndex = null;
+      const stage = document.getElementById('welcomeStage');
+      if (stage.classList.contains('janken-open')) {
+        stage.classList.remove('janken-open');
+        stage.classList.add('setup-open');
+        return;
+      }
+      if (stage.classList.contains('setup-open')) {
+        stage.classList.remove('setup-open');
+        if (selectedGameMode === 'multiplayer') {
+          stage.classList.add('multiplayer-open');
+        }
+        return;
+      }
+      if (stage.classList.contains('multiplayer-open')) {
+        stage.classList.remove('multiplayer-open');
+      }
     }
 
     function getAssignedPlayers() {
@@ -1362,7 +1551,31 @@
       }, 1300);
     }
 
+    function prepareSinglePlayerGame() {
+      const playerName = document.getElementById('setupPlayer1').value.trim() || 'Player 1';
+      socket.emit('cmd_prepare_game', {
+        mode: 'single',
+        type: 'single',
+        players: [playerName],
+        first_player: playerName,
+        player_colors: {
+          [playerName]: selectedSingleColor,
+        },
+      });
+      const params = new URLSearchParams({
+        mode: 'single',
+        waiting: 'operator',
+      });
+      setTimeout(() => {
+        window.location.href = `/player?${params.toString()}`;
+      }, 500);
+    }
+
     function runJanken() {
+      if (selectedGameMode === 'single') {
+        prepareSinglePlayerGame();
+        return;
+      }
       welcomeAudio.click();
       const stage = document.getElementById('welcomeStage');
       const jankenStage = document.getElementById('jankenStage');
@@ -1421,6 +1634,7 @@
     }
 
     document.getElementById('pressStartBtn').addEventListener('click', revealModes);
+    document.getElementById('backButton').addEventListener('click', backFromCurrentScreen);
     document.getElementById('volumeButton').addEventListener('click', (event) => {
       event.stopPropagation();
       welcomeAudio.click();
@@ -1464,9 +1678,20 @@
     document.querySelectorAll('.mode-button, .operator-link').forEach((el) => {
       el.addEventListener('click', () => welcomeAudio.click());
     });
+    document.querySelector('[data-mode="single"]').addEventListener('click', showSinglePlayerSetup);
     document.querySelector('[data-mode="multiplayer"]').addEventListener('click', revealMultiplayerModes);
     document.querySelectorAll('.multiplayer-choice').forEach((el) => {
       el.addEventListener('click', showStaffSetup);
+    });
+    document.querySelectorAll('.color-option').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectedSingleColor = button.dataset.playerColor || '#2563eb';
+        document.querySelectorAll('.color-option').forEach((option) => {
+          option.classList.toggle('selected', option === button);
+        });
+        document.querySelector('label.player-field:first-child .player-color-chip')?.style.setProperty('--player-color', selectedSingleColor);
+        welcomeAudio.click();
+      });
     });
     document.getElementById('setupConfirmBtn').addEventListener('click', runJanken);
     document.getElementById('jankenNextBtn').addEventListener('click', () => {

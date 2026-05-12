@@ -71,12 +71,69 @@ For the 2PC setup, start the B-set UDP sender on the sub PC first, then start th
 
 2PC構成では、先にサブPCでBセットUDP送信プログラムを起動し、その後メインPCでWebサーバーを起動します。ゲーム開始やポーズ保存/読み込みは、従来のキーボード操作ではなくWebインターフェースから行います。
 
+1. Connect both computers to the same network and find the main PC IPv4 address.
+
+1. 2台のPCを同じネットワークに接続し、メインPCのIPv4アドレスを確認します。
+
+```bash
+# macOS example / macOS例
+ipconfig getifaddr en0
+
+# Windows example / Windows例
+ipconfig
+```
+
+2. On the sub PC, edit `sub_bset_udp_sender.py`: set `MAIN_PC_IP` to the main PC IP, and set `CAM0_INDEX` / `CAM1_INDEX` to the two B-set cameras.
+
+2. サブPCで `sub_bset_udp_sender.py` を編集し、`MAIN_PC_IP` をメインPCのIPに設定します。`CAM0_INDEX` / `CAM1_INDEX` はBセット用の2台カメラに合わせます。
+
+```python
+MAIN_PC_IP = "10.128.26.47"  # replace with main PC IP
+UDP_PORT = 5005
+CAM0_INDEX = 0
+CAM1_INDEX = 2
+```
+
+3. Start the sub PC sender first.
+
+3. 先にサブPC側の送信プログラムを起動します。
+
 ```bash
 # Sub PC / サブPC
 python3 sub_bset_udp_sender.py
+```
 
+4. Start the main PC web server in live 2PC mode. Adjust A camera indices if needed.
+
+4. メインPCでWebサーバーを2PCライブ構成で起動します。必要に応じてAセットのカメラインデックスを変更してください。
+
+```bash
 # Main PC / メインPC
+POSERING_USE_REMOTE_B=1 \
+POSERING_REMOTE_B_IP=0.0.0.0 \
+POSERING_REMOTE_B_PORT=5005 \
+POSERING_A_CAM0=1 \
+POSERING_A_CAM1=2 \
+POSERING_PORT=5001 \
 python3 webapp/server.py
+```
+
+5. Open the web interface from the main PC or another device on the same network.
+
+5. メインPC、または同じネットワーク上の別デバイスからWeb画面を開きます。
+
+```text
+http://<MAIN_PC_IP>:5001/
+http://<MAIN_PC_IP>:5001/operator
+http://<MAIN_PC_IP>:5001/player
+```
+
+If you want to test cameras/UDP before connecting BLE hardware, start the main PC with `POSERING_BLE=0`.
+
+BLE機器を接続する前にカメラ/UDPだけ確認したい場合は、メインPCを `POSERING_BLE=0` 付きで起動します。
+
+```bash
+POSERING_BLE=0 POSERING_USE_REMOTE_B=1 python3 webapp/server.py
 ```
 
 ---

@@ -388,11 +388,17 @@ const sound = new SoundSystem();
 let _lastResultSoundKey = null;
 let _lastEndSoundKey = null;
 
+function getPlayerText(key) {
+  const lang = localStorage.getItem('poseringLanguage') === 'en' ? 'en' : 'ja';
+  const table = (window.POSERING_PLAYER_TEXT && window.POSERING_PLAYER_TEXT[lang]) || {};
+  return table[key] || key;
+}
+
 window.enablePlayerAudio = async () => {
   const ready = await sound.unlock();
   document.body.classList.toggle('audio-ready', ready);
   const btn = document.getElementById('soundBtn');
-  if (btn) btn.textContent = ready ? 'AUDIO READY' : 'ENABLE AUDIO';
+  if (btn) btn.textContent = ready ? getPlayerText('audioReady') : getPlayerText('audioButton');
 };
 
 window.toggleSound = () => {
@@ -778,7 +784,11 @@ function applyState(state) {
     (_lobbySetup && _lobbySetup.player_colors) || {},
     state.player_colors || {}
   );
-  const currentPlayer = state.current_player || (_lobbySetup && _lobbySetup.first_player) || activePlayers[0] || null;
+  const currentPlayer = (
+    gs === 'IDLE' && _lobbySetup && _lobbySetup.status === 'ready_for_operator'
+  )
+    ? (_lobbySetup.first_player || activePlayers[0] || null)
+    : (state.current_player || activePlayers[0] || null);
 
   // ── Proximity rings + sonar sounds ──
   if (gs === 'PLAYING') {
