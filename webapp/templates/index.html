@@ -1,276 +1,1494 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PoseRing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+JP:wght@900&family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
   <style>
-    /* ── Welcome screen ── */
-    body { overflow: hidden; }
+    :root {
+      --welcome-ink: #050505;
+      --welcome-paper: #ffffff;
+      --welcome-muted: #8a8a8a;
+      --welcome-ring-red: #ff4d5e;
+      --welcome-ring-blue: #42c7ff;
+      --welcome-ring-green: #62ff4a;
+      --welcome-ring-yellow: #fff24a;
+      --font-en: 'Press Start 2P', monospace;
+      --font-ja: 'DotGothic16', 'Press Start 2P', monospace;
+      --font-title-ja: 'Noto Sans JP', 'DotGothic16', sans-serif;
+    }
 
-    #stars { position:fixed; inset:0; z-index:0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--welcome-paper);
+    }
 
-    .welcome-wrap {
-      position: relative; z-index: 1;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      min-height: 100vh; padding: 2rem;
+    body {
+      color: var(--welcome-ink);
+      font-family: var(--font-en);
+    }
+
+    .welcome-stage {
+      position: relative;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 26vh 49vh 25vh;
+      align-items: center;
+      justify-items: center;
+      padding: clamp(0.7rem, 1.7vw, 1.8rem);
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 76%, rgba(255, 242, 74, 0.16), transparent 17rem),
+        radial-gradient(circle at 72% 70%, rgba(66, 199, 255, 0.14), transparent 18rem),
+        #fff;
+    }
+
+    .screen-tools {
+      position: fixed;
+      inset: 1.1rem 1.2rem auto 1.2rem;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      pointer-events: none;
+    }
+
+    .operator-link,
+    .language-menu,
+    .volume-menu {
+      pointer-events: auto;
+    }
+
+    .operator-link {
+      color: var(--welcome-ink);
+      border: 2px solid var(--welcome-ink);
+      border-radius: 999px;
+      padding: 0.55rem 0.9rem;
+      text-decoration: none;
+      font-family: var(--font-en);
+      font-size: clamp(0.45rem, 0.82vw, 0.62rem);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .language-menu {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 142px;
+      align-items: center;
+      gap: 0.6rem;
+      width: clamp(260px, 21vw, 330px);
+      min-height: 56px;
+      color: var(--welcome-muted);
+      font-family: var(--font-en);
+      font-size: clamp(0.42rem, 0.7vw, 0.55rem);
+      background: rgba(255, 255, 255, 0.86);
+      border: 2px solid #111;
+      border-radius: 999px;
+      padding: 0.42rem 0.55rem 0.42rem 0.8rem;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .language-button,
+    .volume-button {
+      border: 0;
+      outline: 0;
+      background: #111;
+      color: #fff;
+      border-radius: 999px;
+      padding: 0 2rem 0 0.85rem;
+      font-family: var(--font-en);
+      font-size: inherit;
+      cursor: pointer;
+      position: relative;
+      width: 142px;
+      height: 38px;
+      text-align: left;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .language-button::after,
+    .volume-button::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: 0.75rem;
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 7px solid #fff;
+      transform: translateY(-40%);
+    }
+
+    .language-options,
+    .volume-panel {
+      display: none;
+      position: absolute;
+      right: 0.55rem;
+      top: calc(100% + 0.45rem);
+      z-index: 8;
+      min-width: 160px;
+      padding: 0.35rem;
+      border: 2px solid #111;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 12px 0 rgba(0, 0, 0, 0.12), 0 20px 28px rgba(0, 0, 0, 0.16);
+    }
+
+    .language-menu.open .language-options,
+    .volume-menu.open .volume-panel {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .language-option {
+      border: 0;
+      border-radius: 999px;
+      background: #111;
+      color: #fff;
+      font-family: var(--font-en);
+      font-size: clamp(0.42rem, 0.7vw, 0.55rem);
+      padding: 0.65rem 0.85rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .language-option:hover,
+    .language-option.active {
+      background: #3b3b3b;
+    }
+
+    .volume-menu {
+      position: fixed;
+      right: clamp(1rem, 2vw, 1.6rem);
+      bottom: clamp(1rem, 2vw, 1.6rem);
+      z-index: 9;
+      display: block;
+      background: rgba(255, 255, 255, 0.92);
+      border: 2px solid #111;
+      border-radius: 50%;
+      padding: 0.35rem;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .volume-button {
+      width: 58px;
+      height: 58px;
+      min-width: 0;
+      padding: 0;
+      justify-content: center;
+      border-radius: 50%;
+    }
+
+    .volume-button::after {
+      display: none;
+    }
+
+    .speaker-icon {
+      position: relative;
+      width: 36px;
+      height: 32px;
+      display: block;
+    }
+
+    .speaker-icon::before {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: 10px;
+      width: 10px;
+      height: 12px;
+      background: #fff;
+      box-shadow:
+        10px -5px 0 0 #fff,
+        10px -1px 0 0 #fff,
+        10px 3px 0 0 #fff,
+        10px 7px 0 0 #fff;
+      clip-path: polygon(0 20%, 42% 20%, 100% 0, 100% 100%, 42% 80%, 0 80%);
+    }
+
+    .speaker-icon::after {
+      content: "";
+      position: absolute;
+      left: 24px;
+      top: 9px;
+      width: 4px;
+      height: 4px;
+      background: #fff;
+      box-shadow:
+        5px 5px 0 #fff,
+        0 10px 0 #fff,
+        8px -2px 0 #fff,
+        13px 5px 0 #fff,
+        8px 12px 0 #fff;
+    }
+
+    .volume-panel {
+      top: auto;
+      right: 0;
+      bottom: calc(100% + 0.7rem);
+      min-width: 270px;
+      border-radius: 22px;
+      padding: 0.7rem;
+    }
+
+    .volume-row {
+      display: grid;
+      grid-template-columns: 56px 1fr 44px;
+      gap: 0.65rem;
+      align-items: center;
+      color: #111;
+      font-family: var(--font-en);
+      font-size: clamp(0.42rem, 0.7vw, 0.55rem);
+      padding: 0.45rem 0.25rem;
+    }
+
+    .volume-value {
+      color: #777;
+      text-align: right;
+    }
+
+    .volume-slider {
+      appearance: none;
+      width: 100%;
+      height: 14px;
+      border: 2px solid #111;
+      border-radius: 999px;
+      background: #fff;
+      outline: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border: 2px solid #111;
+      border-radius: 50%;
+      background: #111;
+      cursor: pointer;
+      box-shadow: 0 3px 0 rgba(0, 0, 0, 0.20);
+    }
+
+    .volume-slider::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #111;
+      border-radius: 50%;
+      background: #111;
+      cursor: pointer;
+    }
+
+    .title-lockup {
+      align-self: end;
+      display: grid;
+      justify-items: center;
+      gap: clamp(0.8rem, 2vh, 1.35rem);
+      transform: translateY(0.6rem);
+      filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.10));
+    }
+
+    .title-jp {
+      font-family: var(--font-title-ja);
+      font-size: clamp(3rem, 7.1vw, 7.1rem);
+      font-weight: 900;
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      transform: skewX(-9deg);
+      color: #000;
+      white-space: nowrap;
+    }
+
+    .title-sub {
+      font-family: var(--font-en);
+      font-size: clamp(0.78rem, 1.8vw, 1.8rem);
+      line-height: 1;
+      color: #000;
+      transform: skewX(-8deg);
+      white-space: nowrap;
+    }
+
+    .players-art {
+      width: min(1280px, 96vw);
+      max-height: 58vh;
+      object-fit: contain;
+      align-self: center;
+      transform: translateY(1.2rem);
+      filter: drop-shadow(0 18px 16px rgba(0, 0, 0, 0.08));
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .start-area {
+      align-self: start;
+      display: grid;
+      justify-items: center;
+      gap: 0.7rem;
+      min-height: 72px;
+      transform: translateY(-0.4rem);
+    }
+
+    .press-start,
+    .mode-button {
+      min-width: min(340px, 34vw);
+      border: 0;
+      border-radius: 999px;
+      background: #000;
+      color: #fff;
+      font-family: var(--font-en);
+      font-weight: 400;
+      font-size: clamp(0.78rem, 1.55vw, 1.1rem);
+      line-height: 1.25;
+      padding: 0.7rem clamp(1.05rem, 1.8vw, 1.7rem);
+      box-shadow: 0 9px 0 #000, 0 15px 20px rgba(0, 0, 0, 0.14);
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+    }
+
+    .press-start {
+      min-width: 0;
+      width: fit-content;
+      letter-spacing: 0;
+      animation: press-blink 1.05s step-start infinite;
+    }
+
+    html[lang="ja"] body,
+    html[lang="ja"] .operator-link,
+    html[lang="ja"] .language-menu,
+    html[lang="ja"] .language-button,
+    html[lang="ja"] .language-option,
+    html[lang="ja"] .volume-menu,
+    html[lang="ja"] .volume-button,
+    html[lang="ja"] .volume-row,
+    html[lang="ja"] .press-start,
+    html[lang="ja"] .mode-button,
+    html[lang="ja"] .mode-prompt {
+      font-family: var(--font-ja);
+    }
+
+    html[lang="ja"] .operator-link,
+    html[lang="ja"] .language-menu,
+    html[lang="ja"] .language-button,
+    html[lang="ja"] .language-option,
+    html[lang="ja"] .volume-menu,
+    html[lang="ja"] .volume-button,
+    html[lang="ja"] .volume-row {
+      font-size: clamp(0.78rem, 1.25vw, 1rem);
+    }
+
+    html[lang="ja"] .language-menu {
+      font-size: clamp(0.78rem, 1.1vw, 0.92rem);
+    }
+
+    html[lang="ja"] .language-button {
+      font-size: clamp(0.92rem, 1.32vw, 1.08rem);
+    }
+
+    html[lang="ja"] .press-start,
+    html[lang="ja"] .mode-button {
+      font-size: clamp(1.25rem, 2.45vw, 1.9rem);
+      line-height: 1.15;
+      padding: 0.48rem clamp(1.15rem, 2vw, 2rem);
+      min-height: 58px;
+    }
+
+    html[lang="ja"] .mode-prompt {
+      font-size: clamp(1rem, 1.7vw, 1.35rem);
+    }
+
+    .press-start:hover,
+    .mode-button:hover,
+    .operator-link:hover {
+      transform: translateY(3px);
+      box-shadow: 0 5px 0 #000, 0 10px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    .mode-button:active,
+    .press-start:active {
+      transform: translateY(7px);
+      box-shadow: 0 2px 0 #000, 0 6px 10px rgba(0, 0, 0, 0.10);
+    }
+
+    @keyframes press-blink {
+      50% { opacity: 0.22; }
+    }
+
+    .mode-panel {
+      display: none;
+      grid-template-columns: repeat(2, minmax(190px, 1fr));
+      gap: clamp(1rem, 5.6vw, 6.5rem);
+      align-items: center;
+      animation: mode-rise 0.28s ease-out both;
+    }
+
+    .mode-panel.show {
+      display: grid;
+    }
+
+    .mode-prompt {
+      display: none;
+      font-family: var(--font-en);
+      font-size: clamp(0.48rem, 0.9vw, 0.68rem);
+      color: var(--welcome-muted);
+      letter-spacing: 0;
+    }
+
+    .mode-prompt.show {
+      display: block;
+    }
+
+    .welcome-stage.mode-open .press-start {
+      display: none;
+    }
+
+    .welcome-stage.multiplayer-open {
+      grid-template-rows: 1fr;
+      padding-top: clamp(4.5rem, 7vh, 5.5rem);
+    }
+
+    .welcome-stage.multiplayer-open .title-lockup,
+    .welcome-stage.multiplayer-open .players-art,
+    .welcome-stage.multiplayer-open .start-area {
+      display: none;
+    }
+
+    .welcome-stage.setup-open,
+    .welcome-stage.janken-open {
+      grid-template-rows: 1fr;
+      padding-top: clamp(4.5rem, 7vh, 5.5rem);
+    }
+
+    .welcome-stage.setup-open .title-lockup,
+    .welcome-stage.setup-open .players-art,
+    .welcome-stage.setup-open .start-area,
+    .welcome-stage.setup-open .multiplayer-stage,
+    .welcome-stage.janken-open .title-lockup,
+    .welcome-stage.janken-open .players-art,
+    .welcome-stage.janken-open .start-area,
+    .welcome-stage.janken-open .multiplayer-stage,
+    .welcome-stage.janken-open .staff-setup-stage {
+      display: none;
+    }
+
+    .multiplayer-stage {
+      display: none;
+      position: relative;
+      z-index: 2;
+      width: min(1260px, 88vw);
+      align-items: center;
+      justify-content: center;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: clamp(2rem, 6vw, 6rem);
+    }
+
+    .welcome-stage.multiplayer-open .multiplayer-stage {
+      display: grid;
+    }
+
+    .welcome-stage.setup-open .staff-setup-stage,
+    .welcome-stage.janken-open .janken-stage {
+      display: grid;
+    }
+
+    .multiplayer-choice {
+      display: grid;
+      justify-items: center;
+      text-decoration: none;
+      color: #fff;
+    }
+
+    .multiplayer-card {
+      width: 100%;
+      overflow: hidden;
+      border: clamp(6px, 0.7vw, 10px) solid #000;
+      border-radius: clamp(34px, 4vw, 58px);
+      background: #fff;
+      box-shadow: 0 18px 0 rgba(0, 0, 0, 0.12), 0 24px 36px rgba(0, 0, 0, 0.12);
+      transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .multiplayer-choice:hover .multiplayer-card {
+      transform: translateY(5px);
+      box-shadow: 0 11px 0 rgba(0, 0, 0, 0.12), 0 18px 28px rgba(0, 0, 0, 0.10);
+    }
+
+    .multiplayer-card-title {
+      min-height: clamp(78px, 10vh, 124px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      color: #fff;
+      font-family: var(--font-ja);
+      font-size: clamp(2.4rem, 4.8vw, 4.9rem);
+      line-height: 1;
+      padding: 0.6rem 1rem 0.85rem;
+      letter-spacing: 0.02em;
+    }
+
+    .multiplayer-card-art {
+      width: 100%;
+      height: clamp(250px, 40vh, 430px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .multiplayer-card-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    html[lang="en"] .multiplayer-card-title {
+      font-family: var(--font-en);
+    }
+
+    html[lang="en"] .multiplayer-card-title {
+      font-size: clamp(1.35rem, 2.7vw, 2.8rem);
+      padding-bottom: 0.65rem;
+    }
+
+    .staff-setup-stage {
+      display: none;
+      position: relative;
+      z-index: 2;
+      width: min(1040px, 88vw);
+      justify-items: center;
+      gap: clamp(0.55rem, 1.35vh, 1rem);
+    }
+
+    .setup-title {
+      font-family: var(--font-en);
+      font-size: clamp(1.1rem, 2vw, 1.8rem);
+      color: #111;
+    }
+
+    .setup-hint {
+      width: min(820px, 86vw);
+      color: #777;
+      text-align: center;
+      font-family: var(--font-en);
+      font-size: clamp(0.46rem, 0.8vw, 0.68rem);
+      line-height: 1.55;
+    }
+
+    html[lang="ja"] .setup-title,
+    html[lang="ja"] .setup-hint {
+      font-family: var(--font-ja);
+    }
+
+    html[lang="ja"] .setup-title {
+      font-size: clamp(1.45rem, 2.5vw, 2.2rem);
+    }
+
+    html[lang="ja"] .setup-hint {
+      font-size: clamp(0.9rem, 1.35vw, 1.1rem);
+      line-height: 1.35;
+    }
+
+    .front-camera-card {
+      width: min(620px, 66vw);
+      overflow: hidden;
+      border: clamp(5px, 0.55vw, 8px) solid #000;
+      border-radius: clamp(24px, 3vw, 42px);
+      background: #000;
+      box-shadow: 0 16px 0 rgba(0, 0, 0, 0.12), 0 22px 32px rgba(0, 0, 0, 0.10);
+    }
+
+    .front-camera-title {
+      color: #fff;
+      font-family: var(--font-en);
+      font-size: clamp(0.55rem, 0.95vw, 0.78rem);
+      text-align: center;
+      padding: 0.85rem 1rem 0.75rem;
+    }
+
+    html[lang="ja"] .front-camera-title {
+      font-family: var(--font-ja);
+      font-size: clamp(1.05rem, 1.7vw, 1.35rem);
+      padding: 0.55rem 1rem 0.62rem;
+    }
+
+    .front-camera-feed {
+      width: 100%;
+      height: clamp(210px, 34vh, 360px);
+      display: block;
+      background: #fff;
+      object-fit: contain;
+    }
+
+    .player-assignment {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: clamp(1rem, 3vw, 2rem);
+      width: min(620px, 66vw);
+    }
+
+    .player-field {
+      display: grid;
+      gap: 0.55rem;
+      color: #111;
+      font-family: var(--font-en);
+      font-size: clamp(0.5rem, 0.85vw, 0.7rem);
+    }
+
+    .player-color-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .player-color-chip::before {
+      content: "";
+      width: 0.8rem;
+      height: 0.8rem;
+      border-radius: 50%;
+      background: var(--player-color);
+      box-shadow: 0 0 14px var(--player-color);
+    }
+
+    .player-one {
+      --player-color: #2563eb;
+    }
+
+    .player-two {
+      --player-color: #ef4444;
+    }
+
+    html[lang="ja"] .player-field {
+      font-family: var(--font-ja);
+      font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+    }
+
+    .player-field input {
+      width: 100%;
+      border: 3px solid #111;
+      border-radius: 999px;
+      background: #fff;
+      color: #111;
+      font-family: inherit;
+      font-size: inherit;
+      padding: 0.65rem 1rem 0.58rem;
+      outline: none;
+      box-shadow: 0 8px 0 rgba(0, 0, 0, 0.10);
+    }
+
+    .setup-confirm {
+      border: 0;
+      border-radius: 50%;
+      width: clamp(78px, 7vw, 104px);
+      aspect-ratio: 1;
+      background: #000;
+      color: #fff;
+      font-family: var(--font-en);
+      font-size: clamp(1.2rem, 2vw, 1.8rem);
+      cursor: pointer;
+      box-shadow: 0 10px 0 rgba(0, 0, 0, 0.12), 0 16px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    html[lang="ja"] .setup-confirm {
+      font-family: var(--font-ja);
+      font-size: clamp(1.8rem, 3.3vw, 2.8rem);
+    }
+
+    .janken-stage {
+      display: none;
+      position: relative;
+      z-index: 2;
+      width: min(1100px, 90vw);
+      background: #1e1e1e;
+      color: #fff;
+      padding: clamp(1.2rem, 2.2vw, 2rem);
+      gap: clamp(1rem, 2.8vh, 2rem);
+      justify-items: center;
+      box-shadow: 0 22px 44px rgba(0, 0, 0, 0.14);
+    }
+
+    .janken-board {
+      width: 100%;
+      background: #fff;
+      color: #000;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      min-height: clamp(360px, 58vh, 600px);
+    }
+
+    .janken-hands {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(2rem, 5vw, 5rem);
+      font-size: clamp(4rem, 10vw, 9rem);
+      line-height: 1;
+      filter: grayscale(1) contrast(2);
+    }
+
+    .janken-hand {
+      display: inline-block;
+      animation: hand-pop 0.34s steps(2, end) infinite;
+    }
+
+    .janken-hand:nth-child(2) {
+      animation-delay: 0.11s;
+    }
+
+    .janken-hand:nth-child(3) {
+      animation-delay: 0.22s;
+    }
+
+    .janken-stage.done .janken-hand {
+      animation: none;
+    }
+
+    @keyframes hand-pop {
+      50% { transform: translateY(-12px) scale(1.06); }
+    }
+
+    .janken-main {
+      background: #000;
+      color: #fff;
+      text-align: center;
+      font-family: var(--font-ja);
+      font-size: clamp(1.4rem, 2.8vw, 2.5rem);
+      line-height: 1.35;
+      padding: 1.2rem 1rem 1.35rem;
+    }
+
+    .janken-sub,
+    .janken-result {
+      font-family: var(--font-en);
+      font-size: clamp(0.8rem, 1.4vw, 1.25rem);
+      line-height: 1.7;
       text-align: center;
     }
 
-    .logo-block { margin-bottom: 3rem; }
-    .logo-ring {
-      display: inline-block;
-      font-size: clamp(2.5rem, 6vw, 4.5rem);
+    .janken-result {
+      min-height: 2rem;
       color: #fff;
-      text-shadow: 0 0 20px #a78bfa, 0 0 60px #7c3aed, 0 0 100px #4c1d95;
-      letter-spacing: 4px;
-      animation: title-pulse 3s ease-in-out infinite;
-    }
-    .logo-sub {
-      font-size: clamp(0.5rem, 1.5vw, 0.75rem);
-      color: #c4b5fd;
-      letter-spacing: 8px;
-      margin-top: 1rem;
-      animation: fade-in 2s ease forwards;
     }
 
-    @keyframes title-pulse {
-      0%,100% { text-shadow: 0 0 20px #a78bfa, 0 0 60px #7c3aed; }
-      50%      { text-shadow: 0 0 40px #c4b5fd, 0 0 120px #a78bfa, 0 0 180px #7c3aed; }
+    .janken-result .player-one,
+    .janken-result .player-two {
+      font-family: inherit;
+      text-shadow: 0 0 18px currentColor;
     }
 
-    /* Animated rings decoration */
-    .rings-deco {
-      position: relative; width: 220px; height: 220px;
-      margin: 0 auto 2rem;
+    .janken-result .player-one {
+      color: #60a5fa;
     }
-    .ring {
-      position: absolute; border-radius: 50%; border: 4px solid;
-      top: 50%; left: 50%; transform: translate(-50%, -50%);
-    }
-    .ring:nth-child(1){ width:60px;  height:60px;  border-color:#ef4444; animation: spin 4s linear infinite; }
-    .ring:nth-child(2){ width:110px; height:110px; border-color:#eab308; animation: spin 6s linear infinite reverse; }
-    .ring:nth-child(3){ width:160px; height:160px; border-color:#3b82f6; animation: spin 8s linear infinite; }
-    .ring:nth-child(4){ width:210px; height:210px; border-color:#22c55e; animation: spin 10s linear infinite reverse; }
-    @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
 
-    /* Press start button */
-    .press-start {
-      font-family: 'Press Start 2P', monospace;
-      font-size: clamp(0.7rem, 2vw, 1rem);
-      color: #fff;
-      background: transparent;
-      border: 3px solid #fff;
-      padding: 1rem 2.5rem;
-      cursor: pointer;
-      margin-bottom: 3rem;
-      position: relative;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      transition: all 0.15s;
-      animation: blink 1.4s step-start infinite;
+    .janken-result .player-two {
+      color: #f87171;
     }
-    .press-start:hover { background: #fff; color: #1e1b4b; animation: none; }
-    @keyframes blink { 50% { opacity: 0; } }
 
-    /* Quick links */
-    .quick-links { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
-    .quick-link {
-      font-family: 'Press Start 2P', monospace;
-      font-size: 0.6rem;
-      padding: 0.75rem 1.5rem;
-      border: 2px solid;
-      text-decoration: none;
-      letter-spacing: 1px;
-      transition: all 0.15s;
+    .janken-next {
+      display: none;
+      margin: 0.8rem auto 0;
     }
-    .quick-link.player   { color: #4ade80; border-color: #4ade80; }
-    .quick-link.operator { color: #fb923c; border-color: #fb923c; }
-    .quick-link.player:hover   { background: #4ade80; color: #000; }
-    .quick-link.operator:hover { background: #fb923c; color: #000; }
 
-    /* Setup modal */
-    .modal-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,0.85); z-index: 100;
-      align-items: center; justify-content: center;
+    .janken-stage.done .janken-next {
+      display: block;
     }
-    .modal-overlay.open { display: flex; }
-    .modal-box {
-      background: #0f0e2a; border: 3px solid #a78bfa;
-      padding: 2.5rem; max-width: 520px; width: 90%;
-      max-height: 90vh; overflow-y: auto;
+
+    @keyframes mode-rise {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
     }
-    .modal-title {
-      font-size: 0.85rem; color: #c4b5fd;
-      margin-bottom: 2rem; text-align: center;
+
+    .color-pin {
+      position: fixed;
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      z-index: 0;
+      opacity: 0.62;
+      box-shadow: 0 0 18px currentColor, 0 0 42px currentColor;
+      animation: float-dot 5.8s ease-in-out infinite;
     }
-    .form-row { margin-bottom: 1.2rem; }
-    .form-row label {
-      display: block; font-size: 0.5rem; color: #a78bfa;
-      margin-bottom: 0.4rem; letter-spacing: 1px;
+    .ambient-dots {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
     }
-    .form-row input, .form-row select {
-      width: 100%; background: #1e1b4b; color: #e2e8f0;
-      border: 2px solid #4c1d95; padding: 0.6rem;
-      font-family: 'Press Start 2P', monospace; font-size: 0.5rem;
-      box-sizing: border-box;
+    .ambient-dot {
+      position: absolute;
+      left: var(--dot-x);
+      top: var(--dot-y);
+      width: var(--dot-size);
+      height: var(--dot-size);
+      border-radius: 4px;
+      color: var(--dot-color);
+      background: currentColor;
+      opacity: var(--dot-opacity);
+      box-shadow: 0 0 16px currentColor, 0 0 46px currentColor;
+      animation: ambient-float var(--dot-duration) ease-in-out infinite;
+      animation-delay: var(--dot-delay);
     }
-    .form-row input:focus, .form-row select:focus {
-      outline: none; border-color: #a78bfa;
+    .pin-red { color: var(--welcome-ring-red); background: currentColor; right: 13%; top: 34%; }
+    .pin-blue { color: var(--welcome-ring-blue); background: currentColor; right: 43%; bottom: 31%; animation-delay: -1.4s; }
+    .pin-green { color: var(--welcome-ring-green); background: currentColor; left: 36%; top: 43%; animation-delay: -2.1s; }
+    .pin-yellow { color: var(--welcome-ring-yellow); background: currentColor; left: 30%; bottom: 31%; animation-delay: -3.2s; }
+    .pin-red-2 { color: var(--welcome-ring-red); background: currentColor; right: 24%; bottom: 26%; animation-delay: -4.2s; }
+    .pin-blue-2 { color: var(--welcome-ring-blue); background: currentColor; left: 18%; top: 31%; animation-delay: -2.8s; }
+    .pin-green-2 { color: var(--welcome-ring-green); background: currentColor; left: 48%; bottom: 18%; animation-delay: -0.8s; }
+    .pin-yellow-2 { color: var(--welcome-ring-yellow); background: currentColor; right: 31%; top: 22%; animation-delay: -5s; }
+
+    @keyframes float-dot {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.38; }
+      35% { transform: translate3d(18px, -22px, 0) scale(1.18); opacity: 0.78; }
+      68% { transform: translate3d(-14px, 16px, 0) scale(0.9); opacity: 0.52; }
     }
-    .modal-actions { display: flex; gap: 1rem; margin-top: 2rem; justify-content: flex-end; }
-    .btn-cancel {
-      font-family: 'Press Start 2P', monospace; font-size: 0.55rem;
-      background: transparent; border: 2px solid #6b7280;
-      color: #9ca3af; padding: 0.7rem 1.2rem; cursor: pointer;
+    @keyframes ambient-float {
+      0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(0.85); }
+      30% { transform: translate3d(var(--dot-dx), var(--dot-dy), 0) rotate(12deg) scale(1.18); }
+      65% { transform: translate3d(calc(var(--dot-dx) * -0.55), calc(var(--dot-dy) * 0.7), 0) rotate(-10deg) scale(0.94); }
     }
-    .btn-cancel:hover { border-color: #fff; color: #fff; }
-    .btn-go {
-      font-family: 'Press Start 2P', monospace; font-size: 0.55rem;
-      background: #7c3aed; border: 2px solid #a78bfa;
-      color: #fff; padding: 0.7rem 1.5rem; cursor: pointer;
+
+    @media (max-width: 760px) {
+      .welcome-stage {
+        height: 100svh;
+        grid-template-rows: 27svh 47svh 26svh;
+        gap: 0;
+        padding-top: 4.8rem;
+      }
+      .screen-tools {
+        inset: 0.8rem 0.8rem auto 0.8rem;
+        align-items: flex-start;
+      }
+      .operator-link {
+        max-width: 42vw;
+        line-height: 1.5;
+      }
+      .language-menu {
+        width: min(250px, 56vw);
+        grid-template-columns: 1fr 126px;
+      }
+      .language-button {
+        width: 126px;
+      }
+      .volume-panel {
+        min-width: min(270px, 82vw);
+      }
+      .title-jp {
+        font-size: clamp(2.3rem, 11vw, 4.2rem);
+        letter-spacing: -0.07em;
+      }
+      .title-sub {
+        font-size: clamp(0.72rem, 3.8vw, 1.05rem);
+      }
+      .players-art {
+        width: 130vw;
+        max-width: none;
+        max-height: 48svh;
+        transform: translateY(0.8rem);
+      }
+      .mode-panel {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+      .multiplayer-stage {
+        width: min(640px, 86vw);
+        grid-template-columns: 1fr;
+        gap: 1.2rem;
+        padding-bottom: 1rem;
+      }
+      .multiplayer-card-title {
+        min-height: 64px;
+        font-size: clamp(1.8rem, 9vw, 3rem);
+      }
+      .multiplayer-card-art {
+        height: clamp(150px, 25svh, 230px);
+      }
+      .staff-setup-stage,
+      .front-camera-card,
+      .player-assignment {
+        width: min(620px, 88vw);
+      }
+      .front-camera-feed {
+        height: clamp(150px, 24svh, 230px);
+      }
+      .player-assignment {
+        grid-template-columns: 1fr;
+        gap: 0.55rem;
+      }
+      .janken-stage {
+        width: min(620px, 92vw);
+        padding: 0.8rem;
+      }
+      .janken-board {
+        min-height: 48svh;
+      }
+      .janken-hands {
+        font-size: clamp(3rem, 16vw, 5rem);
+      }
+      .press-start,
+      .mode-button {
+        min-width: min(300px, 80vw);
+      }
+      .press-start {
+        min-width: 0;
+      }
     }
-    .btn-go:hover { background: #a78bfa; }
   </style>
 </head>
 <body>
-  <canvas id="stars"></canvas>
-
-  <div class="welcome-wrap">
-    <div class="rings-deco">
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <div class="ring"></div>
-    </div>
-
-    <div class="logo-block">
-      <div class="logo-ring">POSE<span style="color:#a78bfa">RING</span></div>
-      <div class="logo-sub">3D EXPLORATION GAME</div>
-    </div>
-
-    <button class="press-start" onclick="openSetup()">▶ PRESS START</button>
-
-    <div class="quick-links">
-      <a href="/player"   class="quick-link player">👾 PLAYER SCREEN</a>
-      <a href="/operator" class="quick-link operator">🎮 OPERATOR</a>
-    </div>
-  </div>
-
-  <!-- Setup Modal -->
-  <div class="modal-overlay" id="setupModal">
-    <div class="modal-box">
-      <div class="modal-title">── GAME SETUP ──</div>
-
-      <div class="form-row">
-        <label>PLAYER NAMES (comma-separated)</label>
-        <input type="text" id="f-players" value="Player 1, Player 2" placeholder="Alice, Bob, Carol"/>
-      </div>
-
-      <div class="form-row">
-        <label>DIFFICULTY</label>
-        <select id="f-difficulty">
-          <option value="easy">EASY   — big zone, short hold</option>
-          <option value="medium" selected>MEDIUM — balanced</option>
-          <option value="hard">HARD   — tight zone, long hold</option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <label>POSES PER ROUND</label>
-        <select id="f-poses">
-          <option value="3">3</option>
-          <option value="5" selected>5</option>
-          <option value="7">7</option>
-          <option value="10">10</option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <label>NUMBER OF ROUNDS</label>
-        <select id="f-rounds">
-          <option value="1">1</option>
-          <option value="3" selected>3</option>
-          <option value="5">5</option>
-        </select>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick="closeSetup()">CANCEL</button>
-        <button class="btn-go"     onclick="startGame()">START GAME ▶</button>
+  <main class="welcome-stage" id="welcomeStage">
+    <div class="screen-tools">
+      <a class="operator-link" href="/operator" data-i18n="operatorScreen">オペレーター画面</a>
+      <div class="language-menu" id="languageMenu">
+        <span data-i18n="languageLabel">言語</span>
+        <button class="language-button" id="languageButton" type="button" aria-haspopup="listbox" aria-expanded="false">日本語</button>
+        <div class="language-options" id="languageOptions" role="listbox">
+          <button class="language-option" type="button" data-lang="ja" role="option">日本語</button>
+          <button class="language-option" type="button" data-lang="en" role="option">English</button>
+        </div>
       </div>
     </div>
-  </div>
+
+    <div class="volume-menu" id="volumeMenu">
+      <button class="volume-button" id="volumeButton" type="button" aria-label="Volume" aria-haspopup="true" aria-expanded="false">
+        <span class="speaker-icon" aria-hidden="true"></span>
+      </button>
+      <div class="volume-panel" id="volumePanel">
+        <label class="volume-row" for="welcomeMusicVol">
+          <span data-i18n="bgmLabel">BGM</span>
+          <input class="volume-slider" type="range" id="welcomeMusicVol" min="0" max="100" value="22"/>
+          <span class="volume-value" id="welcomeMusicVal">22%</span>
+        </label>
+        <label class="volume-row" for="welcomeSfxVol">
+          <span data-i18n="sfxLabel">効果音</span>
+          <input class="volume-slider" type="range" id="welcomeSfxVol" min="0" max="100" value="85"/>
+          <span class="volume-value" id="welcomeSfxVal">85%</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="ambient-dots" id="ambientDots" aria-hidden="true"></div>
+
+    <span class="color-pin pin-red"></span>
+    <span class="color-pin pin-blue"></span>
+    <span class="color-pin pin-green"></span>
+    <span class="color-pin pin-yellow"></span>
+    <span class="color-pin pin-red-2"></span>
+    <span class="color-pin pin-blue-2"></span>
+    <span class="color-pin pin-green-2"></span>
+    <span class="color-pin pin-yellow-2"></span>
+
+    <div class="title-lockup" aria-label="PoseRing">
+      <div class="title-jp">ポーズリング</div>
+      <div class="title-sub">-PoseRing-</div>
+    </div>
+    <img class="players-art" src="/assets/players-welcome-screen.png" alt="PoseRing players"/>
+
+    <section class="start-area" aria-live="polite">
+      <button class="press-start" id="pressStartBtn" type="button" data-i18n="pressStart">スタート</button>
+      <div class="mode-prompt" id="modePrompt" data-i18n="modePrompt">モードをえらんでください</div>
+      <div class="mode-panel" id="modePanel">
+        <a class="mode-button" href="/player?mode=single" data-mode="single" data-i18n="singlePlayer">ひとりで</a>
+        <a class="mode-button" href="/player?mode=multiplayer" data-mode="multiplayer" data-i18n="multiplayer">みんなで</a>
+      </div>
+    </section>
+
+    <section class="multiplayer-stage" id="multiplayerStage" aria-live="polite">
+      <a class="multiplayer-choice" href="/player?mode=multiplayer&type=coop" data-multiplayer-type="coop">
+        <div class="multiplayer-card">
+          <div class="multiplayer-card-title" data-i18n="cooperativeMode">きょうりょく</div>
+          <div class="multiplayer-card-art">
+            <img src="/assets/multiplayer/coop.png" alt="Cooperative mode"/>
+          </div>
+        </div>
+      </a>
+      <a class="multiplayer-choice" href="/player?mode=multiplayer&type=versus" data-multiplayer-type="versus">
+        <div class="multiplayer-card">
+          <div class="multiplayer-card-title" data-i18n="versusMode">たいせん</div>
+          <div class="multiplayer-card-art">
+            <img src="/assets/multiplayer/vs.png" alt="Versus mode"/>
+          </div>
+        </div>
+      </a>
+    </section>
+
+    <section class="staff-setup-stage" id="staffSetupStage" aria-live="polite">
+      <div class="setup-title" data-i18n="staffSetupTitle">デバイスチェック</div>
+      <div class="setup-hint" data-i18n="staffSetupHint">ふたりのデバイスが正しく装着され、カメラで見えていることを確認してください。</div>
+      <div class="front-camera-card">
+        <div class="front-camera-title" data-i18n="frontCameraLabel">正面カメラ</div>
+        <img class="front-camera-feed" src="/video_feed/0" alt="Front camera"/>
+      </div>
+      <div class="player-assignment">
+        <label class="player-field">
+          <span class="player-color-chip player-one" data-i18n="player1Label">プレイヤー1</span>
+          <input type="text" id="setupPlayer1" value="Player 1"/>
+        </label>
+        <label class="player-field">
+          <span class="player-color-chip player-two" data-i18n="player2Label">プレイヤー2</span>
+          <input type="text" id="setupPlayer2" value="Player 2"/>
+        </label>
+      </div>
+      <button class="setup-confirm" id="setupConfirmBtn" type="button" data-i18n="confirmReady">OK!</button>
+    </section>
+
+    <section class="janken-stage" id="jankenStage" aria-live="polite">
+      <div class="janken-board">
+        <div class="janken-hands">
+          <span class="janken-hand" id="jankenHandA">✊</span>
+          <span class="janken-hand" id="jankenHandB">✌</span>
+          <span class="janken-hand" id="jankenHandC">✋</span>
+        </div>
+        <div class="janken-main" data-i18n="jankenMain">じゃんけんで先攻・後攻をきめよう！</div>
+      </div>
+      <div class="janken-sub" data-i18n="jankenSub">Determine who goes first and second.</div>
+      <div class="janken-result" id="jankenResult"></div>
+      <button class="setup-confirm janken-next" id="jankenNextBtn" type="button" data-i18n="confirmReady">OK!</button>
+    </section>
+  </main>
 
   <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
   <script>
-    /* ── Star field ── */
-    (function() {
-      const canvas = document.getElementById('stars');
-      const ctx    = canvas.getContext('2d');
-      let stars    = [];
+    const fallbackTranslations = {
+      en: {
+        languageLabel: 'Language',
+        pressStart: 'PRESS START',
+        modePrompt: 'Choose Game Mode',
+        singlePlayer: 'Single Player',
+        multiplayer: 'Multiplayer',
+        operatorScreen: 'Operator Screen',
+        playerScreen: 'Player Screen',
+        volumeLabel: 'Volume',
+        bgmLabel: 'BGM',
+        sfxLabel: 'SFX',
+        cooperativeMode: 'Co-op',
+        versusMode: 'VS',
+        staffSetupTitle: 'Device Check',
+        staffSetupHint: 'Confirm both players are wearing the devices correctly and visible to the camera.',
+        frontCameraLabel: 'Front Camera',
+        player1Label: 'Player 1',
+        player2Label: 'Player 2',
+        confirmReady: 'OK',
+        jankenMain: 'Use Jan Ken Po to decide who goes first.',
+        jankenSub: 'Determine who goes first and second.',
+        goesFirst: 'goes first',
+      },
+      ja: {
+        languageLabel: '言語',
+        pressStart: 'スタート',
+        modePrompt: 'モードをえらんでください',
+        singlePlayer: 'ひとりで',
+        multiplayer: 'みんなで',
+        operatorScreen: 'オペレーター画面',
+        playerScreen: 'プレイヤー画面',
+        volumeLabel: '音量',
+        bgmLabel: 'BGM',
+        sfxLabel: '効果音',
+        cooperativeMode: 'きょうりょく',
+        versusMode: 'たいせん',
+        staffSetupTitle: 'デバイスチェック',
+        staffSetupHint: 'ふたりのデバイスが正しく装着され、カメラで見えていることを確認してください。',
+        frontCameraLabel: '正面カメラ',
+        player1Label: 'プレイヤー1',
+        player2Label: 'プレイヤー2',
+        confirmReady: 'OK!',
+        jankenMain: 'じゃんけんで先攻・後攻をきめよう！',
+        jankenSub: 'Determine who goes first and second.',
+        goesFirst: 'が先攻',
+      },
+    };
 
-      function resize() {
-        canvas.width  = window.innerWidth;
-        canvas.height = window.innerHeight;
+    let translations = fallbackTranslations;
+    const socket = io();
+    let selectedMultiplayerType = 'coop';
+    let jankenTimer = null;
+    let pendingJankenFirstIndex = null;
+    const audioSettings = {
+      music_volume: 0.22,
+      effects_volume: 0.85,
+      music_enabled: true,
+      effects_enabled: true,
+    };
+
+    class WelcomeAudio {
+      constructor() {
+        this.ctx = null;
+        this.master = null;
+        this.musicGain = null;
+        this.fxGain = null;
+        this.started = false;
+        this.timer = null;
+        this.step = 0;
+        this.musicVolume = 0.22;
+        this.effectsVolume = 0.85;
       }
 
-      function initStars() {
-        stars = [];
-        for (let i = 0; i < 180; i++) {
-          stars.push({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            r: Math.random() * 1.8 + 0.3,
-            a: Math.random(),
-            s: Math.random() * 0.008 + 0.002,
-          });
+      start() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return;
+          this.ctx = new AudioContext();
+          this.master = this.ctx.createGain();
+          this.musicGain = this.ctx.createGain();
+          this.fxGain = this.ctx.createGain();
+          this.master.gain.value = 0.8;
+          this.musicGain.gain.value = this.musicVolume * 0.55;
+          this.fxGain.gain.value = this.effectsVolume * 0.28;
+          this.musicGain.connect(this.master);
+          this.fxGain.connect(this.master);
+          this.master.connect(this.ctx.destination);
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        if (!this.started) {
+          this.started = true;
+          this.loop();
         }
       }
 
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        stars.forEach(s => {
-          s.a += s.s;
-          if (s.a > 1) s.a = 0;
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255,255,255,${s.a})`;
-          ctx.fill();
-        });
-        requestAnimationFrame(draw);
+      applySettings(settings) {
+        this.musicVolume = Number.isFinite(settings.music_volume) ? settings.music_volume : this.musicVolume;
+        this.effectsVolume = Number.isFinite(settings.effects_volume) ? settings.effects_volume : this.effectsVolume;
+        if (this.musicGain && this.ctx) {
+          this.musicGain.gain.setTargetAtTime(this.musicVolume * 0.55, this.ctx.currentTime, 0.05);
+        }
+        if (this.fxGain && this.ctx) {
+          this.fxGain.gain.setTargetAtTime(this.effectsVolume * 0.28, this.ctx.currentTime, 0.05);
+        }
       }
 
-      window.addEventListener('resize', () => { resize(); initStars(); });
-      resize(); initStars(); draw();
-    })();
+      note(freq, when, duration, type, gainNode, volume) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, when);
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(volume, when + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+        osc.connect(gain);
+        gain.connect(gainNode);
+        osc.start(when);
+        osc.stop(when + duration + 0.04);
+      }
 
-    /* ── Socket.IO ── */
-    const socket = io();
+      loop() {
+        if (!this.ctx) return;
+        const scale = [392, 494, 587, 494, 659, 587, 494, 440];
+        const bass = [196, 196, 247, 247, 220, 220, 247, 247];
+        const tick = () => {
+          if (!this.started || !this.ctx) return;
+          const t = this.ctx.currentTime + 0.02;
+          const i = this.step % scale.length;
+          this.note(scale[i], t, 0.18, 'triangle', this.musicGain, 0.045);
+          if (i % 2 === 0) this.note(bass[i], t, 0.38, 'sine', this.musicGain, 0.034);
+          this.step += 1;
+          this.timer = window.setTimeout(tick, 420);
+        };
+        tick();
+      }
 
-    /* ── Modal logic ── */
-    function openSetup()  { document.getElementById('setupModal').classList.add('open'); }
-    function closeSetup() { document.getElementById('setupModal').classList.remove('open'); }
+      click() {
+        this.start();
+        const t = this.ctx.currentTime + 0.01;
+        this.note(740, t, 0.06, 'square', this.fxGain, 0.12);
+        this.note(988, t + 0.055, 0.08, 'square', this.fxGain, 0.10);
+      }
 
-    function startGame() {
-      const players = document.getElementById('f-players').value
-        .split(',').map(s => s.trim()).filter(Boolean);
-      const data = {
-        players:         players.length ? players : ['Player 1'],
-        difficulty:      document.getElementById('f-difficulty').value,
-        poses_per_round: parseInt(document.getElementById('f-poses').value),
-        num_rounds:      parseInt(document.getElementById('f-rounds').value),
-      };
-      socket.emit('cmd_start_game', data);
-      closeSetup();
-      // Open player screen after short delay
-      setTimeout(() => window.location.href = '/player', 400);
+      previewSfx() {
+        this.start();
+        const t = this.ctx.currentTime + 0.01;
+        this.note(660, t, 0.08, 'square', this.fxGain, 0.14);
+        this.note(880, t + 0.075, 0.08, 'square', this.fxGain, 0.12);
+        this.note(1320, t + 0.15, 0.10, 'triangle', this.fxGain, 0.10);
+      }
     }
+
+    const welcomeAudio = new WelcomeAudio();
+
+    function emitAudioSettings() {
+      localStorage.setItem('poseringAudioSettings', JSON.stringify(audioSettings));
+      welcomeAudio.applySettings(audioSettings);
+      socket.emit('cmd_audio_settings', audioSettings);
+    }
+
+    function applyWelcomeAudioSettings(settings, shouldEmit = false) {
+      Object.assign(audioSettings, settings || {});
+      const music = document.getElementById('welcomeMusicVol');
+      const sfx = document.getElementById('welcomeSfxVol');
+      const musicVal = document.getElementById('welcomeMusicVal');
+      const sfxVal = document.getElementById('welcomeSfxVal');
+      const musicPct = Math.round(audioSettings.music_volume * 100);
+      const sfxPct = Math.round(audioSettings.effects_volume * 100);
+      if (music) music.value = String(musicPct);
+      if (sfx) sfx.value = String(sfxPct);
+      if (musicVal) musicVal.textContent = `${musicPct}%`;
+      if (sfxVal) sfxVal.textContent = `${sfxPct}%`;
+      welcomeAudio.applySettings(audioSettings);
+      localStorage.setItem('poseringAudioSettings', JSON.stringify(audioSettings));
+      if (shouldEmit) socket.emit('cmd_audio_settings', audioSettings);
+    }
+
+    function loadLocalAudioSettings() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('poseringAudioSettings') || '{}');
+        if (typeof saved.music_volume === 'number' || typeof saved.effects_volume === 'number') {
+          applyWelcomeAudioSettings(saved, true);
+        }
+      } catch (err) {
+        applyWelcomeAudioSettings(audioSettings);
+      }
+    }
+
+    function buildAmbientDots() {
+      const holder = document.getElementById('ambientDots');
+      const colors = ['#ff8b98', '#72d5ff', '#8eff86', '#fff06a'];
+      const total = 52;
+      holder.replaceChildren();
+      for (let i = 0; i < total; i += 1) {
+        const dot = document.createElement('span');
+        dot.className = 'ambient-dot';
+        const color = colors[i % colors.length];
+        const size = 5 + Math.round(Math.random() * 11);
+        dot.style.setProperty('--dot-x', `${Math.round(Math.random() * 96)}vw`);
+        dot.style.setProperty('--dot-y', `${Math.round(8 + Math.random() * 86)}vh`);
+        dot.style.setProperty('--dot-size', `${size}px`);
+        dot.style.setProperty('--dot-color', color);
+        dot.style.setProperty('--dot-opacity', `${0.22 + Math.random() * 0.48}`);
+        dot.style.setProperty('--dot-duration', `${4.8 + Math.random() * 5.8}s`);
+        dot.style.setProperty('--dot-delay', `${-Math.random() * 7}s`);
+        dot.style.setProperty('--dot-dx', `${Math.round(-28 + Math.random() * 56)}px`);
+        dot.style.setProperty('--dot-dy', `${Math.round(-34 + Math.random() * 68)}px`);
+        holder.appendChild(dot);
+      }
+    }
+
+    function applyLanguage(lang) {
+      const table = translations[lang] || translations.ja;
+      document.documentElement.lang = lang;
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.dataset.i18n;
+        if (table[key]) el.textContent = table[key];
+      });
+      localStorage.setItem('poseringLanguage', lang);
+      const languageButton = document.getElementById('languageButton');
+      languageButton.textContent = lang === 'ja' ? '日本語' : 'English';
+      document.querySelectorAll('.language-option').forEach((option) => {
+        const active = option.dataset.lang === lang;
+        option.classList.toggle('active', active);
+        option.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    async function loadTranslations() {
+      try {
+        const res = await fetch('/static/i18n/welcome.json', { cache: 'no-store' });
+        if (res.ok) translations = await res.json();
+      } catch (err) {
+        translations = fallbackTranslations;
+      }
+      const saved = localStorage.getItem('poseringLanguage');
+      const browserLang = navigator.language && navigator.language.toLowerCase().startsWith('ja') ? 'ja' : 'en';
+      applyLanguage(saved || browserLang || 'ja');
+    }
+
+    function revealModes() {
+      welcomeAudio.click();
+      document.getElementById('welcomeStage').classList.add('mode-open');
+      document.getElementById('modePanel').classList.add('show');
+      document.getElementById('modePrompt').classList.add('show');
+    }
+
+    function revealMultiplayerModes(event) {
+      event.preventDefault();
+      welcomeAudio.click();
+      closeLanguageMenu();
+      closeVolumeMenu();
+      document.getElementById('welcomeStage').classList.add('multiplayer-open');
+    }
+
+    function showStaffSetup(event) {
+      event.preventDefault();
+      welcomeAudio.click();
+      selectedMultiplayerType = event.currentTarget.dataset.multiplayerType || 'coop';
+      const stage = document.getElementById('welcomeStage');
+      stage.classList.remove('multiplayer-open', 'janken-open');
+      stage.classList.add('setup-open');
+    }
+
+    function getAssignedPlayers() {
+      const p1 = document.getElementById('setupPlayer1').value.trim() || 'Player 1';
+      const p2 = document.getElementById('setupPlayer2').value.trim() || 'Player 2';
+      return [p1, p2];
+    }
+
+    function prepareGameAfterJanken(firstIndex) {
+      const assigned = getAssignedPlayers();
+      const first = assigned[firstIndex];
+      const second = assigned[firstIndex === 0 ? 1 : 0];
+      const players = [first, second];
+      const playerColors = {
+        [assigned[0]]: '#2563eb',
+        [assigned[1]]: '#ef4444',
+      };
+      socket.emit('cmd_prepare_game', {
+        mode: 'multiplayer',
+        type: selectedMultiplayerType,
+        players,
+        first_player: first,
+        player_colors: playerColors,
+      });
+      const params = new URLSearchParams({
+        mode: 'multiplayer',
+        type: selectedMultiplayerType,
+        first: String(firstIndex + 1),
+        waiting: 'operator',
+      });
+      setTimeout(() => {
+        window.location.href = `/player?${params.toString()}`;
+      }, 1300);
+    }
+
+    function runJanken() {
+      welcomeAudio.click();
+      const stage = document.getElementById('welcomeStage');
+      const jankenStage = document.getElementById('jankenStage');
+      const resultEl = document.getElementById('jankenResult');
+      const nextBtn = document.getElementById('jankenNextBtn');
+      const hands = [
+        document.getElementById('jankenHandA'),
+        document.getElementById('jankenHandB'),
+        document.getElementById('jankenHandC'),
+      ];
+      const symbols = ['✊', '✌', '✋'];
+      const assigned = getAssignedPlayers();
+      let frame = 0;
+      pendingJankenFirstIndex = null;
+      resultEl.textContent = '';
+      nextBtn.disabled = true;
+      jankenStage.classList.remove('done');
+      stage.classList.remove('setup-open');
+      stage.classList.add('janken-open');
+      clearInterval(jankenTimer);
+      jankenTimer = setInterval(() => {
+        hands.forEach((hand, index) => {
+          hand.textContent = symbols[(frame + index) % symbols.length];
+        });
+        frame += 1;
+      }, 180);
+      setTimeout(() => {
+        clearInterval(jankenTimer);
+        const firstIndex = Math.random() < 0.5 ? 0 : 1;
+        hands[0].textContent = firstIndex === 0 ? '1P' : '2P';
+        hands[1].textContent = symbols[Math.floor(Math.random() * symbols.length)];
+        hands[2].textContent = firstIndex === 0 ? '2P' : '1P';
+        jankenStage.classList.add('done');
+        const table = translations[document.documentElement.lang] || translations.ja;
+        const suffix = table.goesFirst || 'goes first';
+        const cls = firstIndex === 0 ? 'player-one' : 'player-two';
+        resultEl.innerHTML = `<span class="${cls}">${assigned[firstIndex]}</span> ${suffix}`;
+        pendingJankenFirstIndex = firstIndex;
+        nextBtn.disabled = false;
+        welcomeAudio.previewSfx();
+      }, 2300);
+    }
+
+    function closeLanguageMenu() {
+      const menu = document.getElementById('languageMenu');
+      const button = document.getElementById('languageButton');
+      menu.classList.remove('open');
+      button.setAttribute('aria-expanded', 'false');
+    }
+
+    function closeVolumeMenu() {
+      const menu = document.getElementById('volumeMenu');
+      const button = document.getElementById('volumeButton');
+      menu.classList.remove('open');
+      button.setAttribute('aria-expanded', 'false');
+    }
+
+    document.getElementById('pressStartBtn').addEventListener('click', revealModes);
+    document.getElementById('volumeButton').addEventListener('click', (event) => {
+      event.stopPropagation();
+      welcomeAudio.click();
+      closeLanguageMenu();
+      const menu = document.getElementById('volumeMenu');
+      const isOpen = menu.classList.toggle('open');
+      event.currentTarget.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+    document.getElementById('volumePanel').addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+    document.getElementById('welcomeMusicVol').addEventListener('input', (event) => {
+      audioSettings.music_volume = Number(event.target.value) / 100;
+      audioSettings.music_enabled = audioSettings.music_volume > 0;
+      applyWelcomeAudioSettings(audioSettings);
+      emitAudioSettings();
+    });
+    document.getElementById('welcomeSfxVol').addEventListener('input', (event) => {
+      audioSettings.effects_volume = Number(event.target.value) / 100;
+      audioSettings.effects_enabled = audioSettings.effects_volume > 0;
+      applyWelcomeAudioSettings(audioSettings);
+      emitAudioSettings();
+      welcomeAudio.previewSfx();
+    });
+    document.getElementById('languageButton').addEventListener('click', (event) => {
+      event.stopPropagation();
+      welcomeAudio.click();
+      closeVolumeMenu();
+      const menu = document.getElementById('languageMenu');
+      const isOpen = menu.classList.toggle('open');
+      event.currentTarget.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+    document.querySelectorAll('.language-option').forEach((option) => {
+      option.addEventListener('click', (event) => {
+        event.stopPropagation();
+        welcomeAudio.click();
+        applyLanguage(option.dataset.lang);
+        closeLanguageMenu();
+      });
+    });
+    document.querySelectorAll('.mode-button, .operator-link').forEach((el) => {
+      el.addEventListener('click', () => welcomeAudio.click());
+    });
+    document.querySelector('[data-mode="multiplayer"]').addEventListener('click', revealMultiplayerModes);
+    document.querySelectorAll('.multiplayer-choice').forEach((el) => {
+      el.addEventListener('click', showStaffSetup);
+    });
+    document.getElementById('setupConfirmBtn').addEventListener('click', runJanken);
+    document.getElementById('jankenNextBtn').addEventListener('click', () => {
+      if (pendingJankenFirstIndex === null) return;
+      welcomeAudio.click();
+      prepareGameAfterJanken(pendingJankenFirstIndex);
+    });
+    document.addEventListener('click', () => {
+      closeLanguageMenu();
+      closeVolumeMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeLanguageMenu();
+        closeVolumeMenu();
+      }
+    });
+    socket.on('audio_settings', (settings) => applyWelcomeAudioSettings(settings));
+
+    buildAmbientDots();
+    loadLocalAudioSettings();
+    loadTranslations();
   </script>
 </body>
 </html>

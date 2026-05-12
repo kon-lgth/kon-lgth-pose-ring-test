@@ -26,7 +26,7 @@ import uuid
 import logging
 
 import cv2
-from flask import Flask, Response, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request, send_from_directory
 from flask_socketio import SocketIO, emit
 
 # Allow importing this webapp package when server.py is run directly.
@@ -117,6 +117,15 @@ AUDIO_SETTINGS = {
     "effects_enabled": True,
 }
 
+PREPARED_GAME = {
+    "mode": None,
+    "type": None,
+    "players": [],
+    "first_player": None,
+    "player_colors": {},
+    "status": "idle",
+}
+
 POSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poses.json")
 
 
@@ -178,6 +187,14 @@ def broadcaster():
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/assets/<path:filename>")
+def assets(filename):
+    return send_from_directory(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets"),
+        filename,
+    )
 
 
 @app.route("/player")
@@ -311,6 +328,28 @@ def on_connect():
     emit("game_state", state)
     emit("audio_settings", AUDIO_SETTINGS)
     emit("pose_library", _load_poses())
+    emit("lobby_setup", PREPARED_GAME)
+
+
+@socketio.on("cmd_prepare_game")
+def on_prepare_game(data):
+    players = [str(p).strip() for p in (data or {}).get("players", []) if str(p).strip()]
+    if not players:
+        players = ["Player 1", "Player 2"]
+
+    first_player = (data or {}).get("first_player")
+    if first_player not in players:
+        first_player = players[0]
+
+    PREPARED_GAME.update({
+        "mode": (data or {}).get("mode", "multiplayer"),
+        "type": (data or {}).get("type", "coop"),
+        "players": players,
+        "first_player": first_player,
+        "player_colors": (data or {}).get("player_colors", {}),
+        "status": "ready_for_operator",
+    })
+    socketio.emit("lobby_setup", PREPARED_GAME)
 
 
 @socketio.on("cmd_start_game")
@@ -318,12 +357,14 @@ def on_start_game(data):
     """
     data: {players, difficulty, poses_per_round, num_rounds}
     """
-    players = [p.strip() for p in data.get("players", ["Player 1"]) if p.strip()]
+    data = data or {}
+    players = [p.strip() for p in data.get("players", PREPARED_GAME.get("players") or ["Player 1"]) if p.strip()]
     if not players:
-        players = ["Player 1"]
+        players = PREPARED_GAME.get("players") or ["Player 1"]
 
     settings = {
         "players":         players,
+        "player_colors":   PREPARED_GAME.get("player_colors", {}),
         "difficulty":      data.get("difficulty", "medium"),
         "poses_per_round": int(data.get("poses_per_round", 5)),
         "num_rounds":      int(data.get("num_rounds", 3)),
@@ -346,6 +387,11 @@ def on_start_game(data):
         "feedback_target_color": CONFIG["feedback_target_color"],
     }
     engine.send_command("start_game", settings)
+    PREPARED_GAME.update({
+        "players": players,
+        "status": "started",
+    })
+    socketio.emit("lobby_setup", PREPARED_GAME)
     print(f"[Server] start_game: {settings}")
 
 
@@ -361,6 +407,15 @@ def on_set_targets():
 
 @socketio.on("cmd_reset")
 def on_reset():
+    PREPARED_GAME.update({
+        "mode": None,
+        "type": None,
+        "players": [],
+        "first_player": None,
+        "player_colors": {},
+        "status": "idle",
+    })
+    socketio.emit("lobby_setup", PREPARED_GAME)
     engine.send_command("reset")
 
 

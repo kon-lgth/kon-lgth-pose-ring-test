@@ -9,15 +9,22 @@
   <link rel="stylesheet" href="/static/css/style.css">
   <style>
     /* ───────────────── Layout ───────────────── */
-    body { overflow: hidden; background: #080818; }
-    #stars { position:fixed; inset:0; z-index:0; }
+    body {
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 76%, rgba(255, 242, 74, 0.14), transparent 17rem),
+        radial-gradient(circle at 72% 70%, rgba(66, 199, 255, 0.12), transparent 18rem),
+        #fff;
+      color: #090909;
+    }
+    #stars { display: none; }
 
     .player-wrap {
       position: relative; z-index:1;
       display: grid;
       grid-template-rows: auto 1fr auto;
       min-height: 100vh;
-      padding: 1rem 1.5rem;
+      padding: 1rem 1.5rem 1.4rem;
       gap: 1rem;
       box-sizing: border-box;
     }
@@ -27,14 +34,14 @@
       display: flex; align-items: center; justify-content: space-between;
       flex-wrap: wrap; gap: 0.5rem;
     }
-    .game-logo { font-size: 0.7rem; color: #a78bfa; letter-spacing: 3px; }
+    .game-logo { font-size: 0.7rem; color: #111; letter-spacing: 3px; }
     .round-info { text-align: center; }
-    .round-label { font-size: 0.5rem; color: #6b7280; }
-    .round-val   { font-size: 1rem; color: #c4b5fd; }
+    .round-label { font-size: 0.5rem; color: #777; }
+    .round-val   { font-size: 1rem; color: #111; }
 
     /* ── Timer ── */
     .timer-block { text-align: right; }
-    .timer-label { font-size: 0.5rem; color: #6b7280; }
+    .timer-label { font-size: 0.5rem; color: #777; }
     .timer-val {
       font-size: 1.6rem; transition: color 0.3s;
     }
@@ -42,6 +49,43 @@
     .timer-val.warning { color: #facc15; }
     .timer-val.danger  { color: #ef4444; animation: blink-fast 0.5s step-start infinite; }
     @keyframes blink-fast { 50% { opacity: 0.3; } }
+
+    .turn-banner {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 0.8rem;
+      color: var(--turn-color, #2563eb);
+      border: 4px solid currentColor;
+      border-radius: 999px;
+      background: #fff;
+      padding: 0.65rem 1.25rem 0.55rem;
+      box-shadow: 0 9px 0 rgba(0,0,0,0.10), 0 0 24px color-mix(in srgb, currentColor 35%, transparent);
+      text-align: center;
+    }
+
+    .turn-banner.show {
+      display: flex;
+    }
+
+    .turn-dot {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 18px currentColor;
+      flex: 0 0 auto;
+    }
+
+    .turn-label {
+      font-size: clamp(0.45rem, 1vw, 0.65rem);
+      color: #777;
+    }
+
+    .turn-name {
+      font-size: clamp(1rem, 3vw, 2rem);
+      line-height: 1.1;
+    }
 
     /* ── Middle section ── */
     .middle {
@@ -61,18 +105,18 @@
     /* Hold bar */
     .hold-bar-wrap {
       width: min(600px, 90vw);
-      background: #1e1b4b;
-      border: 3px solid #4c1d95;
+      background: #fff;
+      border: 3px solid #111;
       height: 32px;
       position: relative;
       overflow: hidden;
     }
     .hold-bar-fill {
       height: 100%;
-      background: linear-gradient(90deg, #7c3aed, #c4b5fd);
+      background: #111;
       width: 0%;
       transition: width 0.15s linear;
-      box-shadow: 0 0 18px #a78bfa;
+      box-shadow: 0 0 18px rgba(0,0,0,0.22);
     }
     .hold-bar-label {
       position: absolute; top: 50%; left: 50%;
@@ -93,7 +137,7 @@
       position: relative; width: 80px; height: 80px;
     }
     .prox-ring-svg { width: 80px; height: 80px; transform: rotate(-90deg); }
-    .prox-ring-bg  { fill: none; stroke: #1e1b4b; stroke-width: 8; }
+    .prox-ring-bg  { fill: none; stroke: #d4d4d4; stroke-width: 8; }
     .prox-ring-arc { fill: none; stroke-width: 8; stroke-linecap: round;
                      stroke-dasharray: 201; stroke-dashoffset: 201;
                      transition: stroke-dashoffset 0.3s ease; }
@@ -133,23 +177,31 @@
       display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
     }
     .score-card {
-      background: #0f0e2a; border: 2px solid #312e81;
+      background: #fff; border: 3px solid #111; border-radius: 20px;
       padding: 0.8rem 1.2rem; min-width: 120px; text-align: center;
       position: relative; transition: border-color 0.3s;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.10);
     }
-    .score-card.top-score { border-color: #facc15; }
-    .score-name  { font-size: 0.45rem; color: #94a3b8; margin-bottom: 0.5rem; }
-    .score-value { font-size: 1.0rem; color: #fff; }
+    .score-card.top-score { border-color: #111; background: #f8f8f8; }
+    .score-name  { font-size: 0.45rem; color: #777; margin-bottom: 0.5rem; }
+    .score-value { font-size: 1.0rem; color: #111; }
+    .score-card.active-turn {
+      border-color: var(--player-color, #111);
+      box-shadow: 0 8px 0 rgba(0,0,0,0.10), 0 0 20px color-mix(in srgb, var(--player-color, #111) 35%, transparent);
+    }
+    .score-card.active-turn .score-name {
+      color: var(--player-color, #111);
+    }
     .score-crown { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 1rem; }
 
     /* ── Pose progress pips ── */
     .pose-pips { display: flex; gap: 8px; }
     .pip {
       width: 14px; height: 14px; border-radius: 2px;
-      border: 2px solid #4c1d95; background: #1e1b4b;
+      border: 2px solid #111; background: #fff;
       transition: background 0.3s;
     }
-    .pip.done { background: #7c3aed; border-color: #a78bfa; }
+    .pip.done { background: #111; border-color: #111; }
 
     /* ════════════════════════════════════════════
        COUNTDOWN OVERLAY  (3-2-1-GO)
@@ -342,8 +394,16 @@
     <!-- Middle -->
     <div class="middle">
 
-      <div class="status-msg" id="statusMsg" style="color:#c4b5fd;">
+      <div class="status-msg" id="statusMsg" style="color:#111;">
         Waiting for game…
+      </div>
+
+      <div class="turn-banner" id="turnBanner">
+        <span class="turn-dot"></span>
+        <div>
+          <div class="turn-label">CURRENT PLAYER</div>
+          <div class="turn-name" id="turnName">Player 1</div>
+        </div>
       </div>
 
       <!-- Hold progress bar -->

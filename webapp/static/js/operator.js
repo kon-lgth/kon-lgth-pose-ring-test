@@ -22,12 +22,24 @@ socket.on('disconnect', () => console.log('[Operator] disconnected'));
 socket.on('game_state', applyState);
 socket.on('audio_settings', applyAudioSettings);
 socket.on('pose_library', renderPoseLibrary);
+socket.on('lobby_setup', applyLobbySetup);
 socket.on('pose_selected', pose => {
   if (pose && pose.name) flash(`Loaded pose: ${pose.name}`, 'green');
 });
 socket.on('pose_error', data => {
   flash((data && data.error) || 'Pose error', 'red');
 });
+
+function applyLobbySetup(setup) {
+  if (!setup || setup.status !== 'ready_for_operator') return;
+  if (Array.isArray(setup.players) && setup.players.length) {
+    const playersInput = document.getElementById('s-players');
+    if (playersInput) playersInput.value = setup.players.join(', ');
+  }
+  const type = setup.type ? String(setup.type).toUpperCase() : 'MULTIPLAYER';
+  const first = setup.first_player ? ` | First: ${setup.first_player}` : '';
+  flash(`${type} ready on player screen${first}. Press START / RESUME when ready.`, 'green');
+}
 
 /* ── Commands ── */
 window.startGame = function () {

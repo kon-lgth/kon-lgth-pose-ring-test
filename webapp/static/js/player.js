@@ -496,7 +496,15 @@ function updateProxRing(color, proximity) {
 
 let _lastPlayers = [];
 
-function buildScoreCards(players, scores) {
+const DEFAULT_PLAYER_COLORS = ['#2563eb', '#ef4444', '#16a34a', '#f59e0b'];
+
+function getPlayerColor(name, players = [], playerColors = {}) {
+  if (playerColors && playerColors[name]) return playerColors[name];
+  const index = Math.max(0, players.indexOf(name));
+  return DEFAULT_PLAYER_COLORS[index % DEFAULT_PLAYER_COLORS.length];
+}
+
+function buildScoreCards(players, scores, currentPlayer = null, playerColors = {}) {
   if (!players || players.length === 0) return;
   if (JSON.stringify(players) !== JSON.stringify(_lastPlayers)) {
     _lastPlayers = [...players];
@@ -507,6 +515,7 @@ function buildScoreCards(players, scores) {
       const card   = document.createElement('div');
       card.className = 'score-card';
       card.id        = `sc-${name}`;
+      card.style.setProperty('--player-color', getPlayerColor(name, players, playerColors));
       card.innerHTML = `
         <div class="score-crown" id="crown-${name}" style="display:none;">👑</div>
         <div class="score-name">${name}</div>
@@ -527,9 +536,24 @@ function buildScoreCards(players, scores) {
     const card  = document.getElementById(`sc-${name}`);
     const crown = document.getElementById(`crown-${name}`);
     const isTop = maxScore > 0 && val === maxScore;
-    if (card)  card.classList.toggle('top-score', isTop);
+    if (card) {
+      card.style.setProperty('--player-color', getPlayerColor(name, players, playerColors));
+      card.classList.toggle('top-score', isTop);
+      card.classList.toggle('active-turn', name === currentPlayer);
+    }
     if (crown) crown.style.display = isTop ? 'block' : 'none';
   });
+}
+
+function updateTurnBanner(currentPlayer, players = [], playerColors = {}, gameState = 'IDLE') {
+  const banner = document.getElementById('turnBanner');
+  const nameEl = document.getElementById('turnName');
+  if (!banner || !nameEl) return;
+  const shouldShow = Boolean(currentPlayer) && !['GAME_OVER', 'GAME_CLEAR', 'ROUND_END'].includes(gameState);
+  banner.classList.toggle('show', shouldShow);
+  if (!shouldShow) return;
+  banner.style.setProperty('--turn-color', getPlayerColor(currentPlayer, players, playerColors));
+  nameEl.textContent = currentPlayer;
 }
 
 
@@ -740,10 +764,21 @@ window.sendNextPose = function () {
 
 let _prevState     = null;
 let _lastHoldSound = 0;
+let _lobbySetup    = null;
+let _latestState   = null;
 
 function applyState(state) {
+  _latestState = state;
   const gs     = state.game_state;
   const colors = state.colors || {};
+  const lobbyPlayers = (_lobbySetup && Array.isArray(_lobbySetup.players)) ? _lobbySetup.players : [];
+  const activePlayers = (gs === 'IDLE' && lobbyPlayers.length) ? lobbyPlayers : (state.players || []);
+  const playerColors = Object.assign(
+    {},
+    (_lobbySetup && _lobbySetup.player_colors) || {},
+    state.player_colors || {}
+  );
+  const currentPlayer = state.current_player || (_lobbySetup && _lobbySetup.first_player) || activePlayers[0] || null;
 
   // ── Proximity rings + sonar sounds ──
   if (gs === 'PLAYING') {
@@ -769,14 +804,18 @@ function applyState(state) {
   // ── Status message ──
   const smEl = document.getElementById('statusMsg');
   if (smEl) {
-    smEl.textContent = state.message || '';
+    smEl.textContent = (
+      gs === 'IDLE' && _lobbySetup && _lobbySetup.status === 'ready_for_operator'
+    )
+      ? `Waiting for operator to start ${(_lobbySetup.type || 'multiplayer').toUpperCase()}`
+      : (state.message || '');
     smEl.style.color =
       gs === 'GAME_OVER'   ? '#ef4444' :
       gs === 'GAME_CLEAR'  ? '#facc15' :
       gs === 'POSE_CLEAR'  ? '#facc15' :
       gs === 'TIME_UP'     ? '#a78bfa' :
       gs === 'COUNTDOWN'   ? '#c4b5fd' :
-      state.all_inside     ? '#4ade80' : '#c4b5fd';
+      state.all_inside     ? '#16a34a' : '#111';
   }
 
   // ── Hold bar ──
@@ -794,7 +833,17 @@ function applyState(state) {
   }
 
   // ── Scores ──
-  buildScoreCards(state.players, state.scores);
+  updateTurnBanner(currentPlayer, activePlayers, playerColors, gs);
+  if (gs === 'IDLE' && _lobbySetup && Array.isArray(_lobbySetup.players) && _lobbySetup.players.length) {
+    buildScoreCards(
+      _lobbySetup.players,
+      Object.fromEntries(_lobbySetup.players.map(name => [name, 0])),
+      currentPlayer,
+      playerColors
+    );
+  } else {
+    buildScoreCards(state.players, state.scores, currentPlayer, playerColors);
+  }
 
   // ── Countdown overlay ──
   updateCountdownOverlay(gs, state.countdown, state.current_pose_name);
@@ -838,6 +887,11 @@ socket.on('game_state', state => {
 
 socket.on('audio_settings', settings => {
   sound.applySettings(settings || {});
+});
+
+socket.on('lobby_setup', setup => {
+  _lobbySetup = setup || null;
+  if (_latestState) applyState(_latestState);
 });
 
 /* One-shot snapshot event: show result overlay with photos */

@@ -135,7 +135,17 @@ class GameEngine:
         self._poses_per_round = int(settings.get("poses_per_round", 5))
         self._num_rounds = int(settings.get("num_rounds", 3))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
+        self._player_colors = dict(settings.get("player_colors", {}) or {})
         self._simulation = bool(settings.get("simulation", False))
+
+    def _current_player(self, ctx):
+        if not self._players:
+            return None
+        pose_index = int(ctx.get("pose", 0))
+        if ctx.get("game_state") in (GameState.POSE_CLEAR, GameState.TIME_UP):
+            pose_index = max(0, pose_index - 1)
+        index = pose_index % len(self._players)
+        return self._players[index]
 
     def _blank_colors(self):
         return {
@@ -162,6 +172,8 @@ class GameEngine:
             "num_rounds": self._num_rounds,
             "scores": {p: 0 for p in self._players},
             "players": list(self._players),
+            "player_colors": dict(getattr(self, "_player_colors", {})),
+            "current_player": self._current_player({"pose": 0}),
             "time_left": self._time_per_pose,
             "hold_progress": 0.0,
             "all_inside": False,
@@ -204,6 +216,8 @@ class GameEngine:
                 "num_rounds": self._num_rounds,
                 "scores": dict(ctx["scores"]),
                 "players": list(self._players),
+                "player_colors": dict(getattr(self, "_player_colors", {})),
+                "current_player": self._current_player(ctx),
                 "time_left": ctx.get("time_left", self._time_per_pose),
                 "hold_progress": ctx.get("hold_progress", 0.0),
                 "all_inside": ctx.get("all_inside", False),
@@ -473,6 +487,7 @@ class GameEngine:
                 ctx["message"] = f"HOLD {hold_elapsed:.1f}/{self._hold_time:.1f}s"
 
                 if hold_elapsed >= self._hold_time:
+                    current_player = self._current_player(ctx)
                     ctx["pose"] += 1
                     ctx["pose_result"] = "cleared"
                     ctx["poses_cleared_total"] += 1
@@ -480,8 +495,8 @@ class GameEngine:
                     ctx["message"] = "POSE CLEAR. Tap NEXT when ready."
                     speed_bonus = max(0, int((time_left / self._time_per_pose) * 50))
                     points = 100 * ctx["round"] + speed_bonus
-                    for player in self._players:
-                        ctx["scores"][player] = ctx["scores"].get(player, 0) + points
+                    if current_player:
+                        ctx["scores"][current_player] = ctx["scores"].get(current_player, 0) + points
                     self._queue_snapshot(ctx)
             else:
                 ctx["all_inside_t"] = None
