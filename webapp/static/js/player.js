@@ -38,6 +38,7 @@ class SoundSystem {
     this.effectsEnabled = true;
     this.musicVolume = 0.22;
     this.effectsVolume = 0.85;
+    this.musicMode = 'menu';
     this._nextPing   = {};   // color → next allowed ping time (audioCtx time)
     this._pingRate   = {};   // color → seconds between pings
     this._proxCache  = {};   // color → last proximity 0..1
@@ -105,6 +106,12 @@ class SoundSystem {
     return this.effectsEnabled;
   }
 
+  setMusicMode(mode) {
+    if (this.musicMode === mode) return;
+    this.musicMode = mode;
+    this._musicStep = 0;
+  }
+
   /* ── Proximity update (called each state tick) ── */
   updateProximity(colorData) {
     if (!this.audioReady) return;
@@ -149,19 +156,41 @@ class SoundSystem {
 
   _startMusicLoop() {
     if (this._musicTimer) return;
-    const scale = [196, 247, 294, 330, 392, 330, 294, 247];
-    const bass = [98, 98, 123, 123, 147, 147, 123, 123];
+    const patterns = {
+      menu: {
+        melody: [196, 247, 294, 330, 392, 330, 294, 247],
+        bass: [98, 98, 123, 123, 147, 147, 123, 123],
+        interval: 360,
+        wave: 'triangle',
+      },
+      setup: {
+        melody: [165, 196, 247, 196, 220, 247, 294, 247],
+        bass: [82, 82, 98, 98, 110, 110, 98, 98],
+        interval: 420,
+        wave: 'triangle',
+      },
+      guess: {
+        melody: [392, 466, 523, 587, 523, 466, 392, 349],
+        bass: [98, 98, 117, 117, 131, 131, 117, 98],
+        interval: 220,
+        wave: 'square',
+      },
+    };
 
     const tick = () => {
       if (!this.ctx) return;
       if (this.audioReady && this.musicEnabled) {
+        const pattern = patterns[this.musicMode] || patterns.menu;
         const t = this.ctx.currentTime;
-        const step = this._musicStep % scale.length;
-        this._musicNote(scale[step], t, 0.12, 'triangle', 0.045);
-        if (step % 2 === 0) this._musicNote(bass[step], t, 0.45, 'sine', 0.035);
+        const step = this._musicStep % pattern.melody.length;
+        const melodyVol = this.musicMode === 'guess' ? 0.055 : 0.045;
+        const bassVol = this.musicMode === 'guess' ? 0.045 : 0.035;
+        this._musicNote(pattern.melody[step], t, this.musicMode === 'guess' ? 0.11 : 0.12, pattern.wave, melodyVol);
+        if (step % 2 === 0) this._musicNote(pattern.bass[step], t, this.musicMode === 'guess' ? 0.25 : 0.45, 'sine', bassVol);
         this._musicStep += 1;
       }
-      this._musicTimer = setTimeout(tick, 360);
+      const activePattern = patterns[this.musicMode] || patterns.menu;
+      this._musicTimer = setTimeout(tick, activePattern.interval);
     };
     this._musicTimer = setTimeout(tick, 360);
   }
@@ -387,26 +416,43 @@ class SoundSystem {
     if (!this.audioReady || !this.effectsEnabled) return;
     this._ensureCtx();
     const t = this.ctx.currentTime;
-    [0, 0.18, 0.36, 0.54, 0.76, 0.96].forEach((off, i) => {
+    Array.from({ length: 18 }, (_, i) => i * 0.155).forEach((off, i) => {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.connect(gain); this._connectEffect(gain);
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(i < 4 ? 110 : 82, t + off);
-      osc.frequency.exponentialRampToValueAtTime(45, t + off + 0.16);
-      gain.gain.setValueAtTime(0.55, t + off);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + off + 0.18);
+      osc.frequency.setValueAtTime(i < 11 ? 115 : 92, t + off);
+      osc.frequency.exponentialRampToValueAtTime(42, t + off + 0.13);
+      gain.gain.setValueAtTime(0.45 + Math.min(i, 12) * 0.025, t + off);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + off + 0.14);
       osc.start(t + off);
-      osc.stop(t + off + 0.2);
+      osc.stop(t + off + 0.16);
     });
+    const boom = this.ctx.createOscillator();
+    const boomGain = this.ctx.createGain();
+    boom.connect(boomGain); this._connectEffect(boomGain);
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(72, t + 2.75);
+    boom.frequency.exponentialRampToValueAtTime(38, t + 3.08);
+    boomGain.gain.setValueAtTime(0.9, t + 2.75);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, t + 3.12);
+    boom.start(t + 2.75);
+    boom.stop(t + 3.14);
   }
 
   playWinnerMusic() {
     if (!this.audioReady || !this.musicEnabled) return;
     this._ensureCtx();
     const t = this.ctx.currentTime;
-    [523, 659, 784, 1047, 784, 1047, 1319].forEach((freq, i) => {
-      this._musicNote(freq, t + i * 0.16, i === 6 ? 0.7 : 0.18, 'square', 0.12);
+    const notes = [
+      [523, 0.10], [659, 0.10], [784, 0.10], [1047, 0.28],
+      [988, 0.10], [1047, 0.10], [1175, 0.10], [1319, 0.75],
+    ];
+    let off = 0;
+    notes.forEach(([freq, dur], i) => {
+      this._musicNote(freq, t + off, dur, 'square', i === notes.length - 1 ? 0.18 : 0.14);
+      if (i % 2 === 0) this._musicNote(freq / 2, t + off, dur + 0.05, 'triangle', 0.06);
+      off += dur + 0.04;
     });
   }
 }
@@ -584,7 +630,10 @@ function renderVsState(state) {
   const content = document.getElementById('vsContent');
   const active = !!(state && state.active && state.phase !== 'idle');
   document.body.classList.toggle('vs-active', active);
-  if (!active || !screen || !content) return;
+  if (!active || !screen || !content) {
+    sound.setMusicMode('menu');
+    return;
+  }
   screen.classList.remove('winner-mode');
 
   if (state.phase !== 'setup' && state.phase !== 'challenge_ready') {
@@ -594,6 +643,7 @@ function renderVsState(state) {
   }
 
   if (state.phase === 'setup') {
+    sound.setMusicMode('setup');
     if ((state.current_index || 0) > _vsLastSetupCount) {
       sound.playRoundEnd();
     }
@@ -603,6 +653,7 @@ function renderVsState(state) {
   }
 
   if (state.phase === 'setup_complete') {
+    sound.setMusicMode('setup');
     if (_vsLastSetupCount < state.poses_per_turn) sound.playRoundEnd();
     _vsLastSetupCount = state.poses_per_turn;
     const creator = state.creator || 'Player';
@@ -617,11 +668,13 @@ function renderVsState(state) {
   }
 
   if (state.phase === 'challenge_ready') {
+    sound.setMusicMode('guess');
     startVsChallengeReadyCountdown(state);
     return;
   }
 
   if (state.phase === 'challenge') {
+    sound.setMusicMode('guess');
     _vsChallengeReadyKey = '';
     const challenger = state.challenger || 'Player';
     const challengerLabel = escapeHtml(challenger);
@@ -637,6 +690,7 @@ function renderVsState(state) {
   }
 
   if (state.phase === 'turn_complete') {
+    sound.setMusicMode('setup');
     screen.style.setProperty('--vs-bg', '#1710c9');
     content.innerHTML = `
       ${vsTopBrand()}
@@ -648,6 +702,7 @@ function renderVsState(state) {
   }
 
   if (state.phase === 'results') {
+    sound.setMusicMode('menu');
     renderVsResults(state);
   }
 }
@@ -744,8 +799,9 @@ function renderVsWinner(state) {
   screen.classList.add('winner-mode');
   if (!_vsWinnerPlayed) {
     _vsWinnerPlayed = true;
+    sound.setMusicMode('menu');
     sound.playWinnerDrum();
-    setTimeout(() => sound.playWinnerMusic(), 1200);
+    setTimeout(() => sound.playWinnerMusic(), 3100);
   }
   content.innerHTML = `
     ${vsTopBrand()}
