@@ -169,19 +169,23 @@ kernel = np.ones((5, 5), np.uint8)
 # HSV設定
 # 照明や素材に合わせて調整する
 # =========================
-LOWER_RED_1 = np.array([0, 120, 50])
-UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 120, 50])
+# 赤：背景誤検知を減らすため、SとVを上げる
+LOWER_RED_1 = np.array([0, 160, 80])
+UPPER_RED_1 = np.array([8, 255, 255])
+LOWER_RED_2 = np.array([172, 160, 80])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-LOWER_YELLOW = np.array([20, 80, 80])
-UPPER_YELLOW = np.array([35, 255, 255])
+# 黄色：背景を拾いやすいので、S/Vを上げ、H範囲も少し狭める
+LOWER_YELLOW = np.array([22, 130, 120])
+UPPER_YELLOW = np.array([33, 255, 255])
 
-LOWER_BLUE = np.array([95, 150, 50])
-UPPER_BLUE = np.array([130, 255, 255])
+# 青：検知できていないので、H範囲を広げ、S/V下限を下げる
+LOWER_BLUE = np.array([90, 90, 40])
+UPPER_BLUE = np.array([135, 255, 255])
 
-LOWER_GREEN = np.array([40, 60, 50])
-UPPER_GREEN = np.array([85, 255, 255])
+# 緑：検知できていないので、H範囲を広げ、S/V下限を下げる
+LOWER_GREEN = np.array([35, 40, 35])
+UPPER_GREEN = np.array([90, 255, 255])
 
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
