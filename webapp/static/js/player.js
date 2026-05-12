@@ -405,6 +405,26 @@ window.toggleSound = () => {
   window.enablePlayerAudio();
 };
 
+window.openFinishModal = () => {
+  document.getElementById('finishModal')?.classList.add('show');
+};
+
+window.closeFinishModal = () => {
+  document.getElementById('finishModal')?.classList.remove('show');
+};
+
+window.confirmFinishGame = () => {
+  socket.emit('cmd_reset');
+  _lobbySetup = null;
+  _latestState = null;
+  _lastPlayers = [];
+  localStorage.removeItem('poseringPreparedGame');
+  window.closeFinishModal();
+  setTimeout(() => {
+    window.location.href = '/';
+  }, 150);
+};
+
 
 /* ═══════════════════════════════════════════
    Star field

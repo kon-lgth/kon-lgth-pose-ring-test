@@ -34,7 +34,34 @@
       display: flex; align-items: center; justify-content: space-between;
       flex-wrap: wrap; gap: 0.5rem;
     }
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
     .game-logo { font-size: clamp(0.75rem, 1.2vw, 1rem); color: #111; letter-spacing: 3px; }
+    .finish-game-btn {
+      border: 3px solid #111;
+      border-radius: 999px;
+      background: #fff;
+      color: #111;
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.55rem, 0.85vw, 0.72rem);
+      line-height: 1.25;
+      padding: 0.55rem 0.85rem 0.48rem;
+      cursor: pointer;
+      box-shadow: 0 6px 0 rgba(0,0,0,0.14);
+      transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+    .finish-game-btn:hover {
+      transform: translateY(2px);
+      box-shadow: 0 4px 0 rgba(0,0,0,0.14);
+    }
+    .finish-game-btn:active {
+      transform: translateY(5px);
+      box-shadow: 0 1px 0 rgba(0,0,0,0.14);
+    }
     .round-info { text-align: center; }
     .round-label { font-size: clamp(0.62rem, 1vw, 0.82rem); color: #777; }
     .round-val   { font-size: clamp(1.15rem, 2vw, 1.7rem); color: #111; }
@@ -389,7 +416,11 @@
     }
     html[lang="ja"] .audio-unlock-title,
     html[lang="ja"] .audio-unlock-text,
-    html[lang="ja"] .sound-btn {
+    html[lang="ja"] .sound-btn,
+    html[lang="ja"] .finish-game-btn,
+    html[lang="ja"] .finish-modal-title,
+    html[lang="ja"] .finish-modal-text,
+    html[lang="ja"] .finish-modal-btn {
       font-family: 'DotGothic16', 'Press Start 2P', monospace;
     }
     html[lang="ja"] .audio-unlock-title {
@@ -397,6 +428,86 @@
     }
     html[lang="ja"] .audio-unlock-text,
     html[lang="ja"] .sound-btn {
+      font-size: clamp(1rem, 1.7vw, 1.25rem);
+    }
+
+    .finish-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 220;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 18% 76%, rgba(255, 242, 74, 0.16), transparent 17rem),
+        radial-gradient(circle at 72% 70%, rgba(66, 199, 255, 0.14), transparent 18rem),
+        rgba(255,255,255,0.88);
+      backdrop-filter: blur(6px);
+      padding: 1.5rem;
+    }
+    .finish-modal-backdrop.show {
+      display: flex;
+    }
+    .finish-modal {
+      width: min(620px, 88vw);
+      border: 4px solid #111;
+      border-radius: 34px;
+      background: #fff;
+      color: #111;
+      text-align: center;
+      padding: clamp(1.25rem, 3vw, 2rem);
+      box-shadow: 0 14px 0 rgba(0,0,0,0.14), 0 24px 34px rgba(0,0,0,0.12);
+    }
+    .finish-modal-title {
+      font-size: clamp(0.85rem, 2.2vw, 1.35rem);
+      line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+    .finish-modal-text {
+      font-size: clamp(0.5rem, 1vw, 0.72rem);
+      color: #777;
+      line-height: 1.9;
+      margin-bottom: 1.2rem;
+    }
+    .finish-modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 0.9rem;
+      flex-wrap: wrap;
+    }
+    .finish-modal-btn {
+      border: 0;
+      border-radius: 999px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.55rem, 1.1vw, 0.75rem);
+      line-height: 1.4;
+      padding: 0.85rem 1.35rem 0.75rem;
+      cursor: pointer;
+      box-shadow: 0 8px 0 #000, 0 14px 20px rgba(0,0,0,0.14);
+      transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+    .finish-modal-btn.cancel {
+      background: #fff;
+      color: #111;
+      border: 3px solid #111;
+    }
+    .finish-modal-btn.confirm {
+      background: #111;
+      color: #fff;
+    }
+    .finish-modal-btn:hover {
+      transform: translateY(3px);
+      box-shadow: 0 5px 0 #000, 0 10px 16px rgba(0,0,0,0.12);
+    }
+    .finish-modal-btn:active {
+      transform: translateY(7px);
+      box-shadow: 0 2px 0 #000, 0 6px 10px rgba(0,0,0,0.10);
+    }
+    html[lang="ja"] .finish-modal-title {
+      font-size: clamp(1.35rem, 3vw, 2rem);
+    }
+    html[lang="ja"] .finish-modal-text,
+    html[lang="ja"] .finish-modal-btn {
       font-size: clamp(1rem, 1.7vw, 1.25rem);
     }
   </style>
@@ -408,7 +519,10 @@
 
     <!-- Header -->
     <div class="hud-top">
-      <div class="game-logo">POSERING</div>
+      <div class="hud-left">
+        <div class="game-logo">POSERING</div>
+        <button class="finish-game-btn" type="button" onclick="openFinishModal()" data-player-i18n="finishButton">FINISH</button>
+      </div>
 
       <div class="round-info">
         <div class="round-label">ROUND</div>
@@ -486,6 +600,17 @@
     <div class="end-scores" id="endScores"></div>
   </div>
 
+  <div class="finish-modal-backdrop" id="finishModal" role="dialog" aria-modal="true" aria-labelledby="finishModalTitle">
+    <div class="finish-modal">
+      <div class="finish-modal-title" id="finishModalTitle" data-player-i18n="finishTitle">FINISH GAME?</div>
+      <div class="finish-modal-text" data-player-i18n="finishText">This will reset the game, player names, and scores, then return to the welcome screen.</div>
+      <div class="finish-modal-actions">
+        <button class="finish-modal-btn cancel" type="button" onclick="closeFinishModal()" data-player-i18n="finishCancel">CANCEL</button>
+        <button class="finish-modal-btn confirm" type="button" onclick="confirmFinishGame()" data-player-i18n="finishConfirm">FINISH</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Required by browser autoplay policy. Operator controls the actual volumes. -->
   <div id="audioUnlock">
     <div class="audio-unlock-panel">
@@ -506,12 +631,22 @@
         audioText: 'Tap once on this display to enable countdown, music, and game effects. Volume is controlled from the operator screen.',
         audioButton: 'ENABLE AUDIO',
         audioReady: 'AUDIO READY',
+        finishButton: 'FINISH',
+        finishTitle: 'FINISH GAME?',
+        finishText: 'This will reset the game, player names, and scores, then return to the welcome screen.',
+        finishCancel: 'CANCEL',
+        finishConfirm: 'FINISH',
       },
       ja: {
         audioTitle: 'プレイヤー音声',
         audioText: 'カウントダウン、BGM、効果音を有効にするために一度タップしてください。音量はオペレーター画面で調整します。',
         audioButton: '音声を有効にする',
         audioReady: '音声 OK',
+        finishButton: '終了',
+        finishTitle: 'ゲームを終了しますか？',
+        finishText: 'ゲーム、プレイヤー名、スコアをリセットして、ウェルカム画面に戻ります。',
+        finishCancel: 'キャンセル',
+        finishConfirm: '終了',
       },
     };
     (function applyPlayerLanguage() {
