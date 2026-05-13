@@ -513,6 +513,7 @@ let _vsResultPage = 0;
 let _vsWinnerPlayed = false;
 let _vsLastSetupCount = 0;
 let _vsChallengeReadyKey = '';
+let _vsSetupReadyShownKey = '';
 
 function vsColorFor(name, fallback = '#1710c9') {
   return (_vsState && _vsState.player_colors && _vsState.player_colors[name]) || fallback;
@@ -541,7 +542,10 @@ function startVsSetupCountdown(state) {
   if (_vsCountdownKey === key && _vsCountdownTimer) return;
   clearInterval(_vsCountdownTimer);
   _vsCountdownKey = key;
-  _vsCountdownMode = state.current_index === 0 ? 'ready' : 'setup';
+  const setupTurnKey = `${state.turn_index}:setup-ready`;
+  const shouldShowReady = state.current_index === 0 && _vsSetupReadyShownKey !== setupTurnKey;
+  _vsCountdownMode = shouldShowReady ? 'ready' : 'setup';
+  if (shouldShowReady) _vsSetupReadyShownKey = setupTurnKey;
   _vsCountdownValue = _vsCountdownMode === 'ready' ? 3 : (state.setup_seconds || 10);
   renderVsSetupCountdown();
   sound.playCountdownBeep(_vsCountdownValue);
@@ -577,7 +581,7 @@ function renderVsSetupCountdown() {
   const content = document.getElementById('vsContent');
   screen.style.setProperty('--vs-bg', bg);
   const label = _vsCountdownMode === 'ready'
-    ? formatPlayerText('vsSetupReady', { player: creatorLabel })
+    ? 'GET READY'
     : formatPlayerText('vsSetupPose', { player: creatorLabel, current: done + 1, total: _vsState.poses_per_turn });
   content.innerHTML = `
     ${vsTopBrand()}
@@ -619,7 +623,7 @@ function renderVsChallengeReady(state) {
   content.innerHTML = `
     ${vsTopBrand()}
     <div class="vs-count-disc">${Math.max(0, _vsCountdownValue)}</div>
-    <div class="vs-sub">${formatPlayerText('vsChallengeReady', { player: challengerLabel })}</div>
+    <div class="vs-sub">GET READY</div>
     ${vsPills(0)}
   `;
 }
@@ -632,6 +636,7 @@ function renderVsState(state) {
   document.body.classList.toggle('vs-active', active);
   if (!active || !screen || !content) {
     sound.setMusicMode('menu');
+    _vsSetupReadyShownKey = '';
     return;
   }
   screen.classList.remove('winner-mode');
