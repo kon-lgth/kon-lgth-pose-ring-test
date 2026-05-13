@@ -18,8 +18,9 @@ TARGET_PAIRS = 30               # 保存したいペア数
 MIN_CORNER_SHIFT = 18.0         # 前回と似すぎる姿勢を避けるためのしきい値
 WINDOW_NAME = "Stereo Calibration Capture B"
 
-# WindowsではDirectShowの方が安定することが多い
-USE_DSHOW = True
+# CAP_DSHOW is Windows-only; on macOS/Linux we use the default backend.
+import sys as _sys
+USE_DSHOW = _sys.platform == "win32"
 
 # =========================
 # 保存先作成

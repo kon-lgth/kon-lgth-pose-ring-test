@@ -2,13 +2,23 @@ import cv2
 import numpy as np
 import time
 
+from calib_utils import resolve_npz, find_cameras
+
 # =========================
 # 設定
 # =========================
-CALIB_FILE = r"calibration_images\calib_20260429_120604\stereo_calibration_result.npz"
+# Leave CALIB_FILE empty to auto-use the latest calibration session,
+# or set it manually to override, e.g.:
+#   CALIB_FILE = "calibration_images/calib_B_20260506_161557/stereo_calibration_result.npz"
+CALIB_FILE = ""
 
-CAM0_INDEX = 2
-CAM1_INDEX = 3
+CALIB_FILE = resolve_npz(CALIB_FILE, prefix="calib_")
+
+# Leave empty to auto-detect the first two available cameras at startup,
+# or override manually: CAM0_INDEX = 0 / CAM1_INDEX = 1
+_cam_indices = find_cameras(2)
+CAM0_INDEX = _cam_indices[0]
+CAM1_INDEX = _cam_indices[1]
 
 # 赤のHSV範囲（赤は0度付近と180度付近の2つに分かれる）
 LOWER_RED_1 = np.array([0, 90, 50])
@@ -214,6 +224,14 @@ if not cap1.isOpened():
 for cap in [cap0, cap1]:
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+# macOS AVFoundation needs several frames to warm up after re-opening.
+# Discard black warmup frames so the main loop starts with real video.
+print("カメラウォームアップ中 (黒フレームを読み飛ばし)...")
+for _w in range(60):
+    cap0.read()
+    cap1.read()
+print("カメラ準備完了")
 
 
 print("======================================")

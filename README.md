@@ -1,14 +1,150 @@
-# PoseRingTest
+# PoseRing: A 3D Exploration Game
+
+<img width="1424" height="830" alt="Captura de pantalla 2026-05-12 a la(s) 10 13 11 a m" src="https://github.com/user-attachments/assets/a1dd86d2-25b4-4372-9e68-1d6ca031a2a6" />
 
 [English version](README_en.md)
+
+## Web Interface Quick Start / Webインターフェースのクイックスタート
+
+Use the web interface for the current game flow. The operator screen is for the game master who prepares poses, starts rounds, monitors the four cameras, and controls audio. The player screen is for the shared display or tablet that players can see before/after each round.
+
+現在のゲーム進行ではWebインターフェースを使用します。オペレーター画面は、ポーズの準備、ラウンド開始、4台カメラの確認、音量操作を行うゲームマスター用です。プレイヤー画面は、ラウンド前後にプレイヤーへ表示する共有ディスプレイまたはタブレット用です。
+
+Install the Python dependencies from the repository root.
+
+リポジトリのルートフォルダで、Pythonの必要ライブラリをインストールします。
+
+```bash
+pip install -r requirements.txt
+```
+
+Start the web server. By default it uses live cameras, BLE, and UDP settings from `webapp/server.py`.
+
+Webサーバーを起動します。デフォルトでは、`webapp/server.py` に設定されている実カメラ、BLE、UDP設定を使います。
+
+```bash
+python3 webapp/server.py
+```
+
+For UI testing without cameras or Arduino/BLE hardware, run in simulation mode.
+
+カメラやArduino/BLE機器なしでUIだけ確認したい場合は、シミュレーションモードで起動します。
+
+```bash
+POSERING_SIMULATION=1 python3 webapp/server.py
+```
+
+Open the operator screen on the computer used by the game master. This screen shows the four camera feeds, game setup, saved poses, marker status, BLE status, and audio controls.
+
+ゲームマスターが使うPCでは、オペレーター画面を開きます。この画面では4台のカメラ映像、ゲーム設定、保存済みポーズ、マーカー状態、BLE状態、音量操作を確認できます。
+
+```text
+http://localhost:5001/operator
+```
+
+Open the player screen on the display used by participants. This screen shows the countdown, pose name, game state, clear result, and photos after a pose is completed.
+
+参加者に見せるディスプレイでは、プレイヤー画面を開きます。この画面ではカウントダウン、ポーズ名、ゲーム状態、クリア結果、ポーズ完了後の写真を表示します。
+
+```text
+http://localhost:5001/player
+```
+
+If another device is opening the page over the same network, replace `localhost` with the main PC IP address. The server prints the available URLs and port when it starts.
+
+同じネットワーク上の別デバイスから開く場合は、`localhost` をメインPCのIPアドレスに置き換えてください。サーバー起動時に、使用できるURLとポートがターミナルに表示されます。
+
+```text
+http://<MAIN_PC_IP>:5001/operator
+http://<MAIN_PC_IP>:5001/player
+```
+
+To use a different port, set `POSERING_PORT` before starting the server.
+
+別のポートを使いたい場合は、サーバー起動前に `POSERING_PORT` を指定します。
+
+```bash
+POSERING_PORT=5011 python3 webapp/server.py
+```
+
+For the 2PC setup, start the B-set UDP sender on the sub PC first, then start the web server on the main PC. The web interface replaces the old keyboard flow for starting the game and saving/loading poses.
+
+2PC構成では、先にサブPCでBセットUDP送信プログラムを起動し、その後メインPCでWebサーバーを起動します。ゲーム開始やポーズ保存/読み込みは、従来のキーボード操作ではなくWebインターフェースから行います。
+
+1. Connect both computers to the same network and find the main PC IPv4 address.
+
+1. 2台のPCを同じネットワークに接続し、メインPCのIPv4アドレスを確認します。
+
+```bash
+# macOS example / macOS例
+ipconfig getifaddr en0
+
+# Windows example / Windows例
+ipconfig
+```
+
+2. On the sub PC, edit `sub_bset_udp_sender.py`: set `MAIN_PC_IP` to the main PC IP, and set `CAM0_INDEX` / `CAM1_INDEX` to the two B-set cameras.
+
+2. サブPCで `sub_bset_udp_sender.py` を編集し、`MAIN_PC_IP` をメインPCのIPに設定します。`CAM0_INDEX` / `CAM1_INDEX` はBセット用の2台カメラに合わせます。
+
+```python
+MAIN_PC_IP = "10.128.26.47"  # replace with main PC IP
+UDP_PORT = 5005
+CAM0_INDEX = 0
+CAM1_INDEX = 2
+```
+
+3. Start the sub PC sender first.
+
+3. 先にサブPC側の送信プログラムを起動します。
+
+```bash
+# Sub PC / サブPC
+python3 sub_bset_udp_sender.py
+```
+
+4. Start the main PC web server in live 2PC mode. Adjust A camera indices if needed.
+
+4. メインPCでWebサーバーを2PCライブ構成で起動します。必要に応じてAセットのカメラインデックスを変更してください。
+
+```bash
+# Main PC / メインPC
+POSERING_USE_REMOTE_B=1 \
+POSERING_REMOTE_B_IP=0.0.0.0 \
+POSERING_REMOTE_B_PORT=5005 \
+POSERING_A_CAM0=1 \
+POSERING_A_CAM1=2 \
+POSERING_PORT=5001 \
+python3 webapp/server.py
+```
+
+5. Open the web interface from the main PC or another device on the same network.
+
+5. メインPC、または同じネットワーク上の別デバイスからWeb画面を開きます。
+
+```text
+http://<MAIN_PC_IP>:5001/
+http://<MAIN_PC_IP>:5001/operator
+http://<MAIN_PC_IP>:5001/player
+```
+
+If you want to test cameras/UDP before connecting BLE hardware, start the main PC with `POSERING_BLE=0`.
+
+BLE機器を接続する前にカメラ/UDPだけ確認したい場合は、メインPCを `POSERING_BLE=0` 付きで起動します。
+
+```bash
+POSERING_BLE=0 POSERING_USE_REMOTE_B=1 python3 webapp/server.py
+```
+
+---
 
 ## 概要
 
 2台のカメラを用いてステレオキャリブレーションを行い、マーカーの3次元位置を計測するプログラムです。
 
-現在は、赤・黄・青・緑の4色マーカーの3D座標検出と、赤色マーカーを対象としたXIAO nRF52840 SenseへのBLE LEDフィードバックの動作確認まで成功しています。
+現在は、赤・黄・青・緑の4色マーカーの3D座標検出、2PC構成によるA/Bセットの統合判定、XIAO nRF52840 SenseへのBLE LEDフィードバック、ゴール音再生、クリア時間計測、出題時/クリア時写真保存、クリア後の比較画像表示まで実装・動作確認しています。
 
-また、2026/05/09時点で、AセットとBセットを別々のノートPCで処理する2PC構成を実装し、Wi-Fi / UDP通信によってBセットの3D座標をメインPCへ送信できることを確認しました。
+2026/05/09時点で、AセットとBセットを別々のノートPCで処理する2PC構成を実装し、Wi-Fi / UDP通信によってBセットの3D座標をメインPCへ送信できることを確認しました。2026/05/10時点では、メインPC側の正式実行ファイル `redlight_ring_2pc_main.py` を、写真保存・クリア時間計測・ステージ内外LED制御を含む版に更新しています。
 
 ---
 
@@ -41,16 +177,18 @@ pip install bleak
 
 ## XIAO nRF52840 Sense 側のBLE LED受信プログラム
 
-`redlight_ring.py` または `redlight_ring_2pc_main.py` を使う場合、XIAO nRF52840 Senseには事前に `RED_blightness_D.ino` を書き込んでおく必要があります。
+`redlight_ring.py` または `redlight_ring_2pc_main.py` を使う場合、XIAO nRF52840 Senseには事前に `RED_blightness_D.ino` を書き込んでおく必要があります。現在の `RED_blightness_D.ino` は、`RED_blightness_D_volume.ino` の内容を正式版として反映したもので、DFPlayer Miniの爆音対策を含みます。
 
 このスケッチでは、XIAOを `PoseRing_YELLOW` という名前のBLEデバイスとして動作させます。
 
 BLE受信値の意味は以下です。
 
 - `0`：消灯
-- `1`：BLE接続中の白色表示
+- `1`：BLE接続中、またはステージ内での白色表示
 - `2〜255`：赤色LEDの輝度
 - `250〜255`：ゴール判定内として扱う（赤点滅＋3秒で音再生）
+
+DFPlayer Miniの効果音については、時々想定より大きい音で鳴る問題を避けるため、起動時だけでなく再生直前にも安全音量へ再設定してから再生します。
 
 XIAO nRF52840 Senseの内蔵LEDは `LOW` で点灯、`HIGH` で消灯します。
 
@@ -126,6 +264,30 @@ python redlight_ring_2pc_main.py
 
 メインPC側のB_SET欄に `UDP age: 0.xx s` が表示されれば通信成功です。
 
+現在の `redlight_ring_2pc_main.py` は、以前の `redlight_ring_2pc_main_step4_photo_capture.py` の内容を正式ファイル名に反映したものです。旧版の `redlight_ring_2pc_main.py` は `archive/` に退避して残します。
+
+主なキー操作は以下です。
+
+- `s`：A/B両方の現在4色座標を目標として保存し、出題時写真を保存する（まだゲーム開始しない）
+- `g`：ゲーム開始、クリア時間計測スタート
+- `c`：目標座標、ゲーム開始状態、CLEAR状態をリセット
+- `r`：目標座標、最後に使った判定情報、ゲーム開始状態、CLEAR状態をすべてリセット
+- `0 / 1 / 2`：BLEテスト送信
+- `a`：BLE自動制御に戻す
+- `q / Esc`：終了
+
+追加された主な動作は以下です。
+
+- カメラ画面外、つまりステージ外に出た場合はLEDリングを消灯
+- ステージ内で対象色が見えている場合は白色に点灯
+- 体などで一瞬遮蔽されても、一定時間はステージ内扱いとして白色点灯を維持
+- `s` キーでお題座標を保存しても、`g` キーを押すまではゲーム開始しない
+- `g` キーを押してからクリア時間を計測
+- `s` キーでA Cam0の出題時写真を保存
+- ALL CLEAR時にA Cam0のクリア時写真を保存
+- クリア後に出題時写真とクリア時写真を横並びでモニター表示
+- 比較画像は縦横比を保ち、モニターからはみ出しにくいサイズで表示
+
 ---
 
 ## 事前に変更が必要な箇所
@@ -198,19 +360,19 @@ A_BACKEND = "DEFAULT"
 ```text
 PoseRingTest/
 ├─ capture_calibration_pairs.py
+├─ capture_calibration_pairs_B.py
 ├─ stereo_calibrate_from_saved_pairs.py
-├─ green_3d_from_calibration.py
+├─ stereo_calibrate_B.py
 ├─ four_color_3d_target_game.py
 ├─ redlight_ring.py
-├─ redlight_ring_2pc_main.py
-├─ sub_bset_udp_sender.py
-├─ yellow_3d_ble_led_test.py
-├─ xiao_ble_led_receiver.ino
-├─ RED_blightness_D.ino
-├─ camera_check_2cam.py
-├─ camera_index_check.py
+├─ redlight_ring_2pc_main.py          # メインPC用の正式版。step4写真保存版を反映
+├─ sub_bset_udp_sender.py             # サブPC用BセットUDP送信
+├─ RED_blightness_D.ino               # XIAO用正式版。volume対策版を反映
 ├─ calibration_images/
-└─ archive/
+├─ pose_photos/                       # 出題時/クリア時/比較画像の保存先
+└─ archive/                           # 旧版コードの退避先
+   ├─ redlight_ring_2pc_main_before_stage_led.py
+   └─ RED_blightness_D_before_volume.ino
 ```
 
 ---
@@ -396,3 +558,51 @@ python sub_bset_udp_sender.py
 
 注意点として、最新フォルダを自動で使用するため、失敗したキャリブレーションが最後に作成されている場合は、その失敗した結果を使用してしまう可能性があります。
 失敗したキャリブレーションフォルダは削除するか、成功したキャリブレーションを最後に作成してから実行してください。
+
+### 2026/05/10
+
+#### メインPC側 `redlight_ring_2pc_main.py` の更新
+
+`redlight_ring_2pc_main_step4_photo_capture.py` で動作確認した内容を、正式な実行ファイル名 `redlight_ring_2pc_main.py` に反映しました。以前の `redlight_ring_2pc_main.py` は削除せず、`archive/` に退避して残します。
+
+追加・変更した主な機能は以下です。
+
+- `s` キーはお題座標の保存と出題時写真保存のみを行い、ゲームは開始しない
+- `g` キーでゲーム開始し、その時点からクリア時間を計測する
+- ALL CLEAR時にクリア時間を固定表示する
+- ステージ外、つまり対象リングがカメラ画面外に出た場合はLEDリングを消灯する
+- ステージ内で対象リングが見えている場合はLEDリングを白色点灯する
+- 体などで一瞬遮蔽された場合は、短時間だけ白色点灯を維持する
+- ゲーム開始後、ゴールに近づくと距離に応じて赤色LEDフィードバックを行う
+- 出題時写真とクリア時写真を保存する
+- 写真保存にはA Cam0の画像のみを使用する
+- クリア後に、出題時写真とクリア時写真を横並びにした比較画像を表示する
+- 比較画像は縦横比を保ち、モニターに収まりやすいサイズに調整する
+
+写真は以下のフォルダにセッション単位で保存されます。
+
+```text
+pose_photos/session_YYYYMMDD_HHMMSS/
+```
+
+保存される画像の例は以下です。
+
+```text
+challenge_pose_YYYYMMDD_HHMMSS.jpg
+clear_pose_YYYYMMDD_HHMMSS.jpg
+comparison_YYYYMMDD_HHMMSS.jpg
+```
+
+#### XIAO側 `RED_blightness_D.ino` の更新
+
+`RED_blightness_D_volume.ino` で追加したDFPlayer Miniの音量対策を、正式な `RED_blightness_D.ino` に反映しました。以前の `RED_blightness_D.ino` は削除せず、`archive/` に退避して残します。
+
+主な変更点は以下です。
+
+- 安全音量 `DFPLAYER_SAFE_VOLUME` を追加
+- 起動時にDFPlayer Miniの音量を安全音量へ設定
+- 効果音を鳴らす直前にも、毎回安全音量を再設定
+- 音量設定が反映されるまで短く待ってから再生
+- 時々普段より大きな音で効果音が鳴る問題への対策を追加
+
+音量が大きい場合は `DFPLAYER_SAFE_VOLUME` を小さくし、小さすぎる場合は少し上げて調整します。

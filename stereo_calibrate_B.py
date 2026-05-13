@@ -3,6 +3,8 @@ import numpy as np
 import os
 import glob
 
+from calib_utils import resolve_session_dir
+
 
 def get_latest_session_dir(prefix="calib_B_20"):
     """

@@ -39,17 +39,6 @@ Adafruit_NeoPixel strip(NUM_LEDS, DATA_PIN, NEO_GRB + NEO_KHZ800);
 DFRobotDFPlayerMini myDFPlayer;
 bool dfPlayerReady = false;
 
-// ------------------------------------------------------------
-// 爆音対策用のDFPlayer音量設定
-// DFPlayerの音量は 0〜30。
-// 効果音が時々想定より大きく鳴ることがあるため、
-// 初期化時だけでなく、再生直前にも必ずこの音量へ戻す。
-// まずは安全のため小さめの 5 から開始する。
-// 小さすぎる場合は 7、まだ大きい場合は 3 などに調整する。
-// ------------------------------------------------------------
-#define DFPLAYER_SAFE_VOLUME 10
-#define DFPLAYER_VOLUME_SETTLE_MS 80
-
 // BLE設定：PC側Pythonと一致させる
 const char* DEVICE_NAME = "PoseRing_YELLOW";
 
@@ -176,16 +165,6 @@ void updateGoalFeedback() {
     goalSoundPlayed = true;
 
     if (dfPlayerReady) {
-      // ------------------------------------------------------------
-      // 爆音対策：
-      // DFPlayerは再生時に想定より大きい音で鳴ることがあるため、
-      // 効果音を鳴らす直前に毎回、安全音量を再設定する。
-      // ------------------------------------------------------------
-      myDFPlayer.volume(DFPLAYER_SAFE_VOLUME);
-
-      // 音量設定がDFPlayerに反映されるまで少し待ってから再生する。
-      delay(DFPLAYER_VOLUME_SETTLE_MS);
-
       myDFPlayer.play(1);
       Serial.println("GOAL KEEP 3 SEC: SOUND PLAY");
     }
@@ -228,11 +207,7 @@ void setup() {
 
   if (myDFPlayer.begin(Serial1)) {
     dfPlayerReady = true;
-
-    // 起動時にも安全音量を設定しておく。
-    // ただし、再生直前にも再設定することで爆音事故をさらに防ぐ。
-    myDFPlayer.volume(DFPLAYER_SAFE_VOLUME); // 0〜30
-
+    myDFPlayer.volume(10); // 0〜30
     Serial.println("DFPlayer ready");
   } else {
     Serial.println("DFPlayer init failed");

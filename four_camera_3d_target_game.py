@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 import time
 
+import sys as _sys
+from calib_utils import resolve_npz, find_cameras
+
 # ============================================================
 # PoseRing 4 Camera / 2 Stereo Sets Target Game
 #
@@ -14,17 +17,29 @@ import time
 # =========================
 # 設定
 # =========================
-# Aセット用キャリブレーション結果
-# ※ Aセットを再キャリブレーションした場合はここを書き換える
-A_CALIB_FILE = r"calibration_images\calib_A_20260504_143905\stereo_calibration_result.npz"
-# Bセット用キャリブレーション結果
-B_CALIB_FILE = r"calibration_images\calib_B_20260504_140722\stereo_calibration_result.npz"
+# Leave empty to auto-use the latest session of each type.
+# Set manually to override, e.g.:
+#   A_CALIB_FILE = "calibration_images/calib_A_20260506_123456/stereo_calibration_result.npz"
+#   B_CALIB_FILE = "calibration_images/calib_B_20260506_161557/stereo_calibration_result.npz"
+A_CALIB_FILE = ""
+B_CALIB_FILE = ""
 
-A_CAM0_INDEX = 2
-A_CAM1_INDEX = 3
+# Auto-discovery: A-set = latest calib_A_* (falls back to any calib_* if none)
+try:
+    A_CALIB_FILE = resolve_npz(A_CALIB_FILE, prefix="calib_A_")
+except FileNotFoundError:
+    A_CALIB_FILE = resolve_npz(A_CALIB_FILE, prefix="calib_")
 
-B_CAM0_INDEX = 4
-B_CAM1_INDEX = 5
+B_CALIB_FILE = resolve_npz(B_CALIB_FILE, prefix="calib_B_")
+
+# Leave empty to auto-detect the first four available cameras at startup
+# (A-set = first pair, B-set = second pair).
+# Override manually if needed, e.g.: A_CAM0_INDEX = 0 / A_CAM1_INDEX = 1
+_cam_indices = find_cameras(4)
+A_CAM0_INDEX = _cam_indices[0]
+A_CAM1_INDEX = _cam_indices[1]
+B_CAM0_INDEX = _cam_indices[2]
+B_CAM1_INDEX = _cam_indices[3]
 
 # 表示設定
 DISPLAY_MIRROR = True
@@ -36,10 +51,9 @@ CAPTURE_W = 640
 CAPTURE_H = 480
 FPS = 15
 
-# Aセットは capture_calibration_pairs.py と同じ通常方式で開く
-# Bセットは以前成功した DSHOW 方式で開く
+# DSHOW backend is Windows-only; use DEFAULT on macOS/Linux
 A_BACKEND = "DEFAULT"
-B_BACKEND = "DSHOW"
+B_BACKEND = "DSHOW" if _sys.platform == "win32" else "DEFAULT"
 
 # 判定設定
 CLEAR_DISTANCE_MM = 390.0   # 目標からこの距離以内ならOK
@@ -155,8 +169,13 @@ MASK_FUNCS = {
 def open_camera(index, backend_mode):
     """
     カメラごとに開き方を変える。
-    AセットはDEFAULT、BセットはDSHOWのように分けて使う。
+    AセットはDEFAULT、BセットはWindowsのみDSHOW（macOS/Linuxは自動的にDEFAULTにフォールバック）。
     """
+    import sys as _sys_local
+
+    # CAP_DSHOW is Windows-only; silently fall back on other platforms
+    if backend_mode == "DSHOW" and _sys_local.platform != "win32":
+        backend_mode = "DEFAULT"
 
     if backend_mode == "DSHOW":
         cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
@@ -181,8 +200,8 @@ def open_camera(index, backend_mode):
         cap.set(cv2.CAP_PROP_FPS, FPS)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-    # ウォームアップ
-    for _ in range(10):
+    # ウォームアップ: macOS AVFoundation は最初の数十フレームが黒いため読み飛ばす
+    for _ in range(60):
         cap.read()
 
     return cap

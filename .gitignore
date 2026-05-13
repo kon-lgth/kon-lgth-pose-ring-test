@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+webapp/poses.json
 
 calibration_images/*
 !calibration_images/.gitkeep

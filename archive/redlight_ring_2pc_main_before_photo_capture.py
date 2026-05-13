@@ -110,11 +110,6 @@ ENABLE_STAGE_VISIBLE_LED = True
 # 画面外に出たらすぐ消灯させたいので、基本は True 推奨
 STAGE_VISIBLE_REQUIRES_LIVE = True
 
-# 対象色を一瞬見失っても、すぐにはステージ外扱いにしない猶予時間。
-# 体による一瞬の遮蔽でLEDがチカチカ消えるのを防ぐ。
-# ただし、この猶予時間を超えて見えなければステージ外扱いで消灯する。
-STAGE_LOST_GRACE_SEC = 1.0
-
 # BLEで反応させる判定対象の色
 FEEDBACK_TARGET_COLOR = "RED"
 
@@ -126,20 +121,6 @@ FEEDBACK_MAX_RED_BRIGHTNESS = 255
 DISPLAY_MIRROR = True
 VIEW_W = 320
 VIEW_H = 240
-
-# 写真保存設定
-# sキーで出題時写真、ALL CLEAR時にクリア時写真と比較画像を保存する。
-ENABLE_PHOTO_CAPTURE = True
-PHOTO_BASE_DIR = "pose_photos"
-PHOTO_WINDOW_NAME = "PoseRing Result Photos"
-PHOTO_RESULT_W = 640
-PHOTO_RESULT_H = 480
-
-# 結果写真ウィンドウ表示サイズ。小さめにしてモニターからはみ出さないようにする。
-PHOTO_DISPLAY_MAX_W = 1200
-PHOTO_DISPLAY_MAX_H = 650
-COMPARISON_PANEL_W = 560
-COMPARISON_PANEL_H = 500
 
 # カメラ設定
 CAPTURE_W = 640
@@ -163,30 +144,32 @@ LOST_HOLD_SEC = 0.7
 # 色領域の最小面積
 MIN_AREA = 40
 
+MIN_AREA_BY_COLOR = {
+    "RED": 300,
+    "YELLOW": 500,
+    "BLUE": 300,
+    "GREEN": 500,
+}
+
 kernel = np.ones((5, 5), np.uint8)
 
 # =========================
 # HSV設定
 # 照明や素材に合わせて調整する
 # =========================
-
-# 赤：背景誤検知を減らすため、SとVを上げる
-LOWER_RED_1 = np.array([0, 160, 80])
-UPPER_RED_1 = np.array([8, 255, 255])
-LOWER_RED_2 = np.array([172, 160, 80])
+LOWER_RED_1 = np.array([0, 140, 80])
+UPPER_RED_1 = np.array([10, 255, 255])
+LOWER_RED_2 = np.array([170, 140, 80])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-# 黄色：背景を拾いやすいので、S/Vを上げ、H範囲も少し狭める
-LOWER_YELLOW = np.array([22, 130, 120])
-UPPER_YELLOW = np.array([33, 255, 255])
+LOWER_YELLOW = np.array([22, 120, 120])
+UPPER_YELLOW = np.array([34, 255, 255])
 
-# 青：検知できていないので、H範囲を広げ、S/V下限を下げる
-LOWER_BLUE = np.array([90, 90, 40])
-UPPER_BLUE = np.array([135, 255, 255])
+LOWER_BLUE = np.array([100, 170, 80])
+UPPER_BLUE = np.array([125, 255, 255])
 
-# 緑：検知できていないので、H範囲を広げ、S/V下限を下げる
-LOWER_GREEN = np.array([35, 40, 35])
-UPPER_GREEN = np.array([90, 255, 255])
+LOWER_GREEN = np.array([45, 100, 80])
+UPPER_GREEN = np.array([80, 255, 255])
 
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
@@ -303,167 +286,6 @@ def format_vec(v):
     return f"X:{v[0]:.1f} Y:{v[1]:.1f} Z:{v[2]:.1f}"
 
 
-def get_timestamp_text():
-    return time.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def get_timestamp_for_filename():
-    return time.strftime("%Y%m%d_%H%M%S")
-
-
-def create_photo_session_dir():
-    session_dir = os.path.join(PHOTO_BASE_DIR, "session_" + get_timestamp_for_filename())
-    os.makedirs(session_dir, exist_ok=True)
-    return session_dir
-
-
-def resize_with_aspect_padding(image, target_w, target_h, bg_color=(20, 20, 20)):
-    """
-    画像の縦横比を保ったまま target_w x target_h に収める。
-    余った部分は bg_color で塗りつぶす。
-    """
-    if image is None:
-        return None
-
-    h, w = image.shape[:2]
-    if w <= 0 or h <= 0:
-        return None
-
-    scale = min(target_w / w, target_h / h)
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-
-    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    canvas = np.full((target_h, target_w, 3), bg_color, dtype=np.uint8)
-
-    x0 = (target_w - new_w) // 2
-    y0 = (target_h - new_h) // 2
-    canvas[y0:y0 + new_h, x0:x0 + new_w] = resized
-
-    return canvas
-
-
-def make_photo_from_a_set(set_a, title, subtitle=""):
-    """
-    AセットのA Cam0画像だけを使い、タイトル付きの保存用写真を作る。
-    A Cam1は3D計測には使うが、出題時/クリア時の記録写真には使わない。
-    """
-    if set_a.out0 is None:
-        return None
-
-    image = maybe_flip_for_display(set_a.out0.copy())
-    image = cv2.resize(image, (PHOTO_RESULT_W, PHOTO_RESULT_H))
-
-    header_h = 90
-    photo = np.full((image.shape[0] + header_h, image.shape[1], 3), 25, dtype=np.uint8)
-    photo[header_h:, :] = image
-
-    cv2.putText(
-        photo,
-        title,
-        (25, 38),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1.0,
-        (255, 255, 255),
-        2,
-    )
-    cv2.putText(
-        photo,
-        f"{subtitle}  {get_timestamp_text()}",
-        (25, 70),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (200, 200, 200),
-        1,
-    )
-
-    cv2.putText(photo, "A Cam0", (25, header_h + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-
-    return photo
-
-
-def save_photo_image(image, session_dir, filename):
-    if image is None or session_dir is None:
-        return None
-
-    os.makedirs(session_dir, exist_ok=True)
-    path = os.path.join(session_dir, filename)
-    ok = cv2.imwrite(path, image)
-    if ok:
-        print(f"[PHOTO SAVED] {path}")
-        return path
-
-    print(f"[PHOTO SAVE FAILED] {path}")
-    return None
-
-
-def make_comparison_photo(challenge_image, clear_image, clear_time=None):
-    """出題時写真とクリア時写真を左右に並べた比較画像を作る。
-
-    A Cam0写真だけを使う。
-    縦横比を保ったまま、比較用の小さめパネルに収めることで、
-    画像の横伸びとモニターからのはみ出しを防ぐ。
-    """
-    if challenge_image is None or clear_image is None:
-        return None
-
-    single_w = COMPARISON_PANEL_W
-    single_h = COMPARISON_PANEL_H
-
-    left = resize_with_aspect_padding(challenge_image, single_w, single_h)
-    right = resize_with_aspect_padding(clear_image, single_w, single_h)
-
-    header_h = 75
-    label_h = 38
-    canvas_h = header_h + label_h + single_h
-    canvas_w = single_w * 2
-    canvas = np.full((canvas_h, canvas_w, 3), 20, dtype=np.uint8)
-
-    title = "PoseRing Result"
-    if clear_time is not None:
-        title += f"  /  Clear Time: {clear_time:.2f} sec"
-
-    cv2.putText(canvas, title, (25, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-    cv2.putText(canvas, get_timestamp_text(), (25, 63), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (190, 190, 190), 1)
-
-    cv2.putText(canvas, "CHALLENGE / TARGET POSE", (25, header_h + 27), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 255, 255), 2)
-    cv2.putText(canvas, "CLEAR POSE", (single_w + 25, header_h + 27), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 255, 0), 2)
-
-    y0 = header_h + label_h
-    canvas[y0:y0 + single_h, 0:single_w] = left
-    canvas[y0:y0 + single_h, single_w:single_w * 2] = right
-
-    cv2.line(canvas, (single_w, header_h), (single_w, canvas_h - 1), (120, 120, 120), 2)
-    return canvas
-
-
-def show_photo_window_safely(image):
-    """結果写真をモニターに収まるサイズで表示する。"""
-    if image is None:
-        return
-
-    h, w = image.shape[:2]
-    scale = min(PHOTO_DISPLAY_MAX_W / w, PHOTO_DISPLAY_MAX_H / h, 1.0)
-
-    if scale < 1.0:
-        display_image = cv2.resize(
-            image,
-            (int(w * scale), int(h * scale)),
-            interpolation=cv2.INTER_AREA,
-        )
-    else:
-        display_image = image
-
-    cv2.imshow(PHOTO_WINDOW_NAME, display_image)
-
-
-def close_photo_window_safely():
-    try:
-        cv2.destroyWindow(PHOTO_WINDOW_NAME)
-    except Exception:
-        pass
-
-
 def detect_color_center(source_frame, draw_frame, color_name):
     """
     source_frameで色検出し、draw_frameに描画する。
@@ -486,8 +308,10 @@ def detect_color_center(source_frame, draw_frame, color_name):
     c = max(contours, key=cv2.contourArea)
     area = cv2.contourArea(c)
 
-    if area < MIN_AREA:
-        return mask, None, f"{color_name}: small area={int(area)}", (0, 0, 255)
+    min_area = MIN_AREA_BY_COLOR.get(color_name, MIN_AREA)
+    
+    if area < min_area:
+        return mask, None, f"{color_name}: small area={int(area)} < {min_area}", (0, 0, 255)
 
     M = cv2.moments(c)
     if M["m00"] == 0:
@@ -1258,9 +1082,7 @@ def main():
     print("PoseRing 2PC Main / A Camera + Remote B UDP")
     print("Aセット優先、Aで見失った色だけBセットで補助")
     print("q / Esc : 終了")
-    print("s       : A/B両方の現在4色座標を目標として保存 + 出題時写真保存（まだゲーム開始しない）")
-    print("g       : ゲーム開始 / クリア時間計測スタート")
-    print("clear  : ALL CLEAR時にクリア時写真保存 + 比較画像表示")
+    print("s       : A/B両方の現在4色座標を目標として保存")
     print("c       : 目標とCLEAR状態をリセット")
     print("r       : 目標・最後に使った判定情報・CLEAR状態をすべてリセット")
     print("0/1/2   : BLEテスト")
@@ -1303,29 +1125,8 @@ def main():
     overall_clear = False
     hold_elapsed = 0.0
 
-    # ゲーム開始/クリア時間計測
-    # sキーではお題を保存するだけで、gキーを押すまでゲームは開始しない。
-    game_active = False
-    game_start_time = None
-    clear_time = None
-    clear_logged = False
-
     # None=自動, 1=白固定, 2-255=赤輝度固定, 0=消灯固定
     force_ble_state = None
-
-    # ステージ内外LED制御用。
-    # 対象色が最後にLIVE検出された時刻を保持し、短時間の遮蔽では消灯しない。
-    last_target_live_time = None
-    target_stage_lost_age = None
-
-    # 写真保存用
-    photo_session_dir = None
-    challenge_photo_image = None
-    clear_photo_image = None
-    result_display_image = None
-    challenge_photo_path = None
-    clear_photo_path = None
-    comparison_photo_path = None
 
     try:
         while True:
@@ -1359,22 +1160,6 @@ def main():
                 and target_state["source"] in ["A_LIVE", "B_LIVE"]
             )
 
-            # 遮蔽猶予付きのステージ内判定。
-            # target_live_in_stage は「今この瞬間に見えているか」。
-            # target_stage_visible は「今見えている、または直近 STAGE_LOST_GRACE_SEC 秒以内に見えていたか」。
-            stage_now = time.time()
-            if target_live_in_stage:
-                last_target_live_time = stage_now
-                target_stage_lost_age = 0.0
-                target_stage_visible = True
-            else:
-                if last_target_live_time is None:
-                    target_stage_lost_age = None
-                    target_stage_visible = False
-                else:
-                    target_stage_lost_age = stage_now - last_target_live_time
-                    target_stage_visible = target_stage_lost_age <= STAGE_LOST_GRACE_SEC
-
             if STAGE_VISIBLE_REQUIRES_LIVE:
                 target_visible = target_live_in_stage
             elif REQUIRE_TARGET_LIVE_FOR_LED:
@@ -1388,7 +1173,7 @@ def main():
             target_distance = target_state["distance"] if target_state else None
             target_inside = bool(target_state and target_state["inside"])
 
-            if game_active and target_goal_ready and target_visible and target_distance is not None:
+            if target_goal_ready and target_visible and target_distance is not None:
                 if target_inside:
                     red_brightness = FEEDBACK_MAX_RED_BRIGHTNESS
                 else:
@@ -1401,7 +1186,7 @@ def main():
             #   ステージ内・まだ赤フィードバックなし: 1 = WHITE
             #   ステージ内・ゴール接近/ゴール内: 2-255 = RED brightness
             if ENABLE_STAGE_VISIBLE_LED:
-                if not target_stage_visible:
+                if not target_live_in_stage:
                     auto_ble_state = BleFeedbackController.STATE_OFF
                 elif red_brightness is None:
                     auto_ble_state = BleFeedbackController.STATE_CONNECTED_WHITE
@@ -1429,99 +1214,31 @@ def main():
 
             all_inside = ready and all(final_states[color]["inside"] for color in COLOR_ORDER)
 
-            # =========================
-            # ゲーム進行 / クリア時間計測
-            # =========================
-            # sキーで目標座標を保存しただけではゲームは開始しない。
-            # gキーで game_active=True になってから、HOLD判定とタイマーを動かす。
-            if game_active and ready and not overall_clear:
-                if all_inside:
-                    if all_inside_start_time is None:
-                        all_inside_start_time = time.time()
+            if all_inside:
+                if all_inside_start_time is None:
+                    all_inside_start_time = time.time()
 
-                    hold_elapsed = time.time() - all_inside_start_time
+                hold_elapsed = time.time() - all_inside_start_time
 
-                    if hold_elapsed >= HOLD_TIME_SEC:
-                        overall_clear = True
-                        game_active = False
-                        clear_time = time.time() - game_start_time if game_start_time is not None else None
+                if hold_elapsed >= HOLD_TIME_SEC:
+                    overall_clear = True
 
-                        if ENABLE_PHOTO_CAPTURE:
-                            if photo_session_dir is None:
-                                photo_session_dir = create_photo_session_dir()
-
-                            clear_photo_image = make_photo_from_a_set(
-                                set_a,
-                                "CLEAR POSE",
-                                f"Clear Time: {clear_time:.2f} sec" if clear_time is not None else "Clear Time: ---",
-                            )
-                            clear_photo_path = save_photo_image(
-                                clear_photo_image,
-                                photo_session_dir,
-                                "clear_pose_" + get_timestamp_for_filename() + ".jpg",
-                            )
-
-                            result_display_image = make_comparison_photo(
-                                challenge_photo_image,
-                                clear_photo_image,
-                                clear_time,
-                            )
-                            comparison_photo_path = save_photo_image(
-                                result_display_image,
-                                photo_session_dir,
-                                "comparison_" + get_timestamp_for_filename() + ".jpg",
-                            )
-
-                            if result_display_image is not None:
-                                show_photo_window_safely(result_display_image)
-
-                        if not clear_logged:
-                            print("======================================")
-                            if clear_time is not None:
-                                print(f"ALL CLEAR! clear_time={clear_time:.2f} sec")
-                            else:
-                                print("ALL CLEAR!")
-                            if challenge_photo_path is not None:
-                                print("出題時写真:", challenge_photo_path)
-                            if clear_photo_path is not None:
-                                print("クリア時写真:", clear_photo_path)
-                            if comparison_photo_path is not None:
-                                print("比較画像:", comparison_photo_path)
-                            print("======================================")
-                            clear_logged = True
-
-                else:
-                    all_inside_start_time = None
-                    hold_elapsed = 0.0
             else:
-                # ゲーム開始前、クリア後、またはターゲット未設定時はHOLDを進めない。
-                if not overall_clear:
-                    all_inside_start_time = None
-                    hold_elapsed = 0.0
-
-            elapsed_text = "---"
-            if game_active and game_start_time is not None:
-                elapsed_text = f"{time.time() - game_start_time:.2f}s"
-            elif clear_time is not None:
-                elapsed_text = f"{clear_time:.2f}s"
+                all_inside_start_time = None
+                hold_elapsed = 0.0
+                overall_clear = False
 
             if overall_clear:
-                if clear_time is not None:
-                    overall_text = f"ALL CLEAR! TIME {clear_time:.2f}s"
-                else:
-                    overall_text = "ALL CLEAR!"
+                overall_text = "ALL CLEAR!"
                 overall_color = (0, 255, 0)
             elif not ready:
                 overall_text = "NO TARGET | Press s to set A/B targets"
                 overall_color = (0, 200, 255)
-            elif not game_active:
-                overall_text = "TARGET SET | Press g to START"
-                overall_color = (255, 200, 0)
             elif all_inside:
-                overall_text = f"HOLD {hold_elapsed:.1f}/{HOLD_TIME_SEC:.1f}s | TIME {elapsed_text}"
+                overall_text = f"HOLD {hold_elapsed:.1f}/{HOLD_TIME_SEC:.1f}s"
                 overall_color = (0, 255, 255)
             else:
-                overall_text = f"PLAYING | TIME {elapsed_text}"
+                overall_text = "PLAYING"
                 overall_color = (0, 255, 255)
 
             # =========================
@@ -1606,7 +1323,7 @@ def main():
             )
             cv2.putText(
                 info,
-                "[s] Set Target [g] Start Game [c] Reset [r] Reset All [0/1/2] BLE test [a] Auto [q] Quit",
+                "[s] Set Target [c] Reset [r] Reset All [0/1/2] BLE test [a] Auto [q] Quit",
                 (15, 95),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
@@ -1661,29 +1378,10 @@ def main():
             cv2.putText(
                 info,
                 f"OVERALL:  {overall_text}",
-                (30, 420),
+                (30, 430),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.72,
+                0.8,
                 overall_color,
-                2,
-            )
-
-            if game_start_time is None and clear_time is None:
-                timer_text = "TIMER: ---"
-            elif game_active and game_start_time is not None:
-                timer_text = f"TIMER: {time.time() - game_start_time:.2f} sec"
-            elif clear_time is not None:
-                timer_text = f"CLEAR TIME: {clear_time:.2f} sec"
-            else:
-                timer_text = "TIMER: waiting"
-
-            cv2.putText(
-                info,
-                timer_text,
-                (30, 450),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
                 2,
             )
 
@@ -1699,13 +1397,9 @@ def main():
                 ble_color = (0, 255, 255)
 
             elif ble_feedback is not None and ble_feedback.is_connected:
-                if ENABLE_STAGE_VISIBLE_LED and not target_stage_visible:
+                if ENABLE_STAGE_VISIBLE_LED and not target_live_in_stage:
                     ble_text = f"BLE LED: SEND 0 OFF / {FEEDBACK_TARGET_COLOR} OUT OF STAGE"
                     ble_color = (120, 120, 120)
-                elif ENABLE_STAGE_VISIBLE_LED and not target_live_in_stage:
-                    age_text = "---" if target_stage_lost_age is None else f"{target_stage_lost_age:.1f}s"
-                    ble_text = f"BLE LED: SEND 1 WHITE / {FEEDBACK_TARGET_COLOR} LOST GRACE {age_text}"
-                    ble_color = (255, 255, 255)
                 else:
                     ble_text = f"BLE LED: SEND 1 WHITE / {FEEDBACK_TARGET_COLOR} IN STAGE"
                     ble_color = (255, 255, 255)
@@ -1726,9 +1420,6 @@ def main():
 
             display = np.hstack((cameras_left, info))
             cv2.imshow("PoseRing 2PC Main", display)
-
-            if result_display_image is not None and overall_clear:
-                show_photo_window_safely(result_display_image)
 
             key = cv2.waitKey(1) & 0xFF
 
@@ -1751,28 +1442,6 @@ def main():
             if key == ord("a"):
                 force_ble_state = None
                 print("[BLE TEST] auto mode")
-
-            if key == ord("g"):
-                if not targets_ready(set_a, set_b):
-                    print("ゲーム開始できません。先に s キーで4色の目標座標を保存してください。")
-                else:
-                    last_used = {color: None for color in COLOR_ORDER}
-                    all_inside_start_time = None
-                    hold_elapsed = 0.0
-                    overall_clear = False
-                    game_active = True
-                    game_start_time = time.time()
-                    clear_time = None
-                    clear_logged = False
-                    clear_photo_image = None
-                    result_display_image = None
-                    clear_photo_path = None
-                    comparison_photo_path = None
-                    close_photo_window_safely()
-
-                    print("======================================")
-                    print("ゲーム開始。クリア時間計測を開始しました。")
-                    print("======================================")
 
             if key == ord("s"):
                 saved_a, missing_a = set_a.set_targets_from_current()
@@ -1798,48 +1467,18 @@ def main():
 
                 last_used = {color: None for color in COLOR_ORDER}
                 all_inside_start_time = None
-                hold_elapsed = 0.0
                 overall_clear = False
-                game_active = False
-                game_start_time = None
-                clear_time = None
-                clear_logged = False
-
-                photo_session_dir = None
-                challenge_photo_image = None
-                clear_photo_image = None
-                result_display_image = None
-                challenge_photo_path = None
-                clear_photo_path = None
-                comparison_photo_path = None
-                close_photo_window_safely()
-
-                if ENABLE_PHOTO_CAPTURE:
-                    photo_session_dir = create_photo_session_dir()
-                    challenge_photo_image = make_photo_from_a_set(
-                        set_a,
-                        "CHALLENGE / TARGET POSE",
-                        "Saved when s key was pressed",
-                    )
-                    challenge_photo_path = save_photo_image(
-                        challenge_photo_image,
-                        photo_session_dir,
-                        "challenge_pose_" + get_timestamp_for_filename() + ".jpg",
-                    )
 
                 print("======================================")
-                print("A/Bの目標座標を保存しました。まだゲームは開始していません。")
+                print("A/Bの目標座標を保存しました。")
                 print("A saved:", saved_a, "| A missing:", missing_a)
                 print("B saved:", saved_b, "| B missing:", missing_b)
-                if challenge_photo_path is not None:
-                    print("出題時写真:", challenge_photo_path)
 
                 if missing_both:
                     print("注意: A/Bどちらにも目標がない色があります:", missing_both)
                     print("この色は判定できないため、もう一度見える位置で s を押してください。")
                 else:
                     print("4色すべてについて、AまたはBに目標座標があります。")
-                    print("準備ができたら g キーでゲーム開始・タイマー開始します。")
 
                 for color in COLOR_ORDER:
                     print(f"[{color}]")
@@ -1860,22 +1499,9 @@ def main():
 
                 last_used = {color: None for color in COLOR_ORDER}
                 all_inside_start_time = None
-                hold_elapsed = 0.0
                 overall_clear = False
-                game_active = False
-                game_start_time = None
-                clear_time = None
-                clear_logged = False
-                photo_session_dir = None
-                challenge_photo_image = None
-                clear_photo_image = None
-                result_display_image = None
-                challenge_photo_path = None
-                clear_photo_path = None
-                comparison_photo_path = None
-                close_photo_window_safely()
 
-                print("目標座標・ゲーム開始状態・CLEAR状態をリセットしました。")
+                print("目標座標とCLEAR状態をリセットしました。")
 
             if key == ord("r"):
                 set_a.reset_targets()
@@ -1885,22 +1511,9 @@ def main():
 
                 last_used = {color: None for color in COLOR_ORDER}
                 all_inside_start_time = None
-                hold_elapsed = 0.0
                 overall_clear = False
-                game_active = False
-                game_start_time = None
-                clear_time = None
-                clear_logged = False
-                photo_session_dir = None
-                challenge_photo_image = None
-                clear_photo_image = None
-                result_display_image = None
-                challenge_photo_path = None
-                clear_photo_path = None
-                comparison_photo_path = None
-                close_photo_window_safely()
 
-                print("目標座標・最後に使った判定情報・ゲーム開始状態・CLEAR状態をすべてリセットしました。")
+                print("目標座標・最後に使った判定情報・CLEAR状態をすべてリセットしました。")
 
     finally:
         if ble_feedback is not None:
