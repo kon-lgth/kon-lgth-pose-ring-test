@@ -863,7 +863,7 @@ function renderVsWinner(state) {
 ═══════════════════════════════════════════ */
 
 const COLOR_LABEL = {
-  RED: '🔴 R.ARM', YELLOW: '🟡 L.ARM', BLUE: '🔵 R.LEG', GREEN: '🟢 L.LEG'
+  RED: 'RED', YELLOW: 'YELLOW', BLUE: 'BLUE', GREEN: 'GREEN'
 };
 const COLOR_NAME_KEY = {
   RED: 'colorRed', YELLOW: 'colorYellow', BLUE: 'colorBlue', GREEN: 'colorGreen'
@@ -927,7 +927,7 @@ function updateProxRing(color, proximity, colorState = null) {
         <span class="prox-status ${connected ? 'connected' : 'disconnected'}">${getPlayerText(connected ? 'connected' : 'notConnected')}</span>
       `;
     } else {
-      label.textContent = COLOR_LABEL[color];
+      label.textContent = getPlayerText(COLOR_NAME_KEY[color]) || COLOR_LABEL[color];
     }
   }
 }

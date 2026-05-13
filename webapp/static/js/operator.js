@@ -102,6 +102,9 @@ function updatePoseMeta() {
     return;
   }
 
+  const pointCount = COLOR_ORDER.filter(color => (
+    ['A', 'B', 'SIM'].some(setName => Array.isArray(pose.sets && pose.sets[setName] && pose.sets[setName][color]))
+  )).length;
   const counts = ['A', 'B', 'SIM'].map(setName => {
     const set = pose.sets && pose.sets[setName];
     if (!set) return null;
@@ -109,7 +112,7 @@ function updatePoseMeta() {
     return `${setName}:${count}/4`;
   }).filter(Boolean).join(' ');
 
-  meta.textContent = `${difficultyLabel(pose.difficulty)} | ${counts || 'no coordinates'}`;
+  meta.textContent = `${difficultyLabel(pose.difficulty)} | ${pointCount} free target point${pointCount === 1 ? '' : 's'} | ${counts || 'no coordinates'}`;
   const diff = document.getElementById('s-difficulty');
   if (diff) diff.value = pose.difficulty || 'medium';
 }
@@ -307,9 +310,12 @@ function updateColorStatus(colors) {
     const dist   = data.distance != null ? `${Math.round(data.distance)}mm` : '—';
     const src    = data.source || 'NO DATA';
     const prox   = data.proximity || 0;
-    const tgt    = data.target
-      ? `[${data.target.map(v => v.toFixed(0)).join(', ')}]`
+    const targetLabel = data.target_index
+      ? `target ${data.target_index}/${data.target_count || '?'}`
       : 'no target';
+    const tgt = data.target
+      ? `${targetLabel} [${data.target.map(v => v.toFixed(0)).join(', ')}]`
+      : targetLabel;
 
     det.textContent  = `${dist} | src:${src} | tgt:${tgt}`;
     badge.textContent= status;

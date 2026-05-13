@@ -280,18 +280,212 @@ class GameEngine:
             "clear_logged": False,
             "current_pose_name": None,
             "current_pose_difficulty": self._settings.get("difficulty", "medium"),
+            "target_slots": [],
         }
+
+    def _target_slots_from_pose_sets(self, sets, allowed_sets=None):
+        allowed_sets = set(allowed_sets) if allowed_sets is not None else None
+        slots = []
+        for color in COLOR_ORDER:
+            points = {}
+            for set_name, set_points in (sets or {}).items():
+                if allowed_sets is not None and set_name not in allowed_sets:
+                    continue
+                if not isinstance(set_points, dict):
+                    continue
+                point = set_points.get(color)
+                if point is not None:
+                    points[set_name] = np.array(point, dtype=np.float64)
+            if points:
+                slots.append({"source_color": color, "points": points})
+        return slots
+
+    def _target_slots_from_current_targets(self, set_a=None, set_b=None):
+        slots = []
+        for color in COLOR_ORDER:
+            points = {}
+            if set_a is not None:
+                a_target = set_a.states[color].get("target")
+                if a_target is not None:
+                    points["A"] = np.array(a_target, dtype=np.float64)
+            if set_b is not None:
+                b_target = set_b.states[color].get("target")
+                if b_target is not None:
+                    points["B"] = np.array(b_target, dtype=np.float64)
+            if points:
+                slots.append({"source_color": color, "points": points})
+        return slots
+
+    def _current_points_from_sets(self, set_a=None, set_b=None):
+        current = {color: {} for color in COLOR_ORDER}
+        for color in COLOR_ORDER:
+            if set_a is not None:
+                st = set_a.states[color]
+                point = st.get("live_point") if st.get("live") else st.get("current_point")
+                if point is not None:
+                    current[color]["A"] = {
+                        "point": np.array(point, dtype=np.float64),
+                        "source": "A_LIVE" if st.get("live") else "LAST_USED",
+                        "y_diff": st.get("y_diff"),
+                    }
+            if set_b is not None:
+                st = set_b.states[color]
+                point = st.get("live_point") if st.get("live") else st.get("current_point")
+                if point is not None:
+                    current[color]["B"] = {
+                        "point": np.array(point, dtype=np.float64),
+                        "source": "B_LIVE" if st.get("live") else "LAST_USED",
+                        "y_diff": st.get("y_diff"),
+                    }
+        return current
+
+    def _current_points_from_color_state(self, colors):
+        current = {color: {} for color in COLOR_ORDER}
+        for color in COLOR_ORDER:
+            point = (colors or {}).get(color, {}).get("current")
+            if point is not None:
+                current[color]["SIM"] = {
+                    "point": np.array(point, dtype=np.float64),
+                    "source": "SIM",
+                    "y_diff": (colors or {}).get(color, {}).get("y_diff"),
+                }
+        return current
+
+    def _target_distance_for_color(self, color_current, slot):
+        best = None
+        for set_name, target in slot.get("points", {}).items():
+            cur = color_current.get(set_name)
+            if not cur:
+                continue
+            distance = float(np.linalg.norm(cur["point"] - target))
+            if best is None or distance < best["distance"]:
+                best = {
+                    "distance": distance,
+                    "used_set": set_name,
+                    "source": cur["source"],
+                    "current": cur["point"],
+                    "target": target,
+                    "y_diff": cur.get("y_diff"),
+                }
+        return best
+
+    def _solve_color_target_assignment(self, distance_matrix):
+        best = {"count": -1, "distance": float("inf"), "assignment": {}}
+        targets = list(range(len(distance_matrix)))
+
+        def walk(target_index, used_colors, assignment, total_distance):
+            assigned_count = len(assignment)
+            if (
+                assigned_count > best["count"]
+                or (assigned_count == best["count"] and total_distance < best["distance"])
+            ):
+                best["count"] = assigned_count
+                best["distance"] = total_distance
+                best["assignment"] = dict(assignment)
+
+            if target_index >= len(targets):
+                return
+
+            # Option 1: leave this target unmatched for partial progress display.
+            walk(target_index + 1, used_colors, assignment, total_distance)
+
+            # Option 2: assign one unused color to this target.
+            for color in COLOR_ORDER:
+                if color in used_colors:
+                    continue
+                distance = distance_matrix[target_index].get(color)
+                if distance is None or distance > self._clear_dist:
+                    continue
+                assignment[color] = target_index
+                used_colors.add(color)
+                walk(target_index + 1, used_colors, assignment, total_distance + distance)
+                used_colors.remove(color)
+                assignment.pop(color, None)
+
+        walk(0, set(), {}, 0.0)
+        return best["assignment"]
+
+    def _color_agnostic_colors(self, target_slots, current_by_color):
+        colors = {}
+        distance_matrix = []
+        details_by_target = []
+
+        for slot in target_slots:
+            row = {}
+            details = {}
+            for color in COLOR_ORDER:
+                detail = self._target_distance_for_color(current_by_color.get(color, {}), slot)
+                if detail is not None:
+                    row[color] = detail["distance"]
+                    details[color] = detail
+            distance_matrix.append(row)
+            details_by_target.append(details)
+
+        assignment = self._solve_color_target_assignment(distance_matrix)
+        assigned_by_color = {color: target_index for color, target_index in assignment.items()}
+        max_distance = max(self._clear_dist * 3.0, 1.0)
+
+        for color in COLOR_ORDER:
+            nearest = None
+            nearest_index = None
+            for target_index, details in enumerate(details_by_target):
+                detail = details.get(color)
+                if detail is None:
+                    continue
+                if nearest is None or detail["distance"] < nearest["distance"]:
+                    nearest = detail
+                    nearest_index = target_index
+
+            assigned_index = assigned_by_color.get(color)
+            if assigned_index is not None:
+                nearest = details_by_target[assigned_index].get(color, nearest)
+                nearest_index = assigned_index
+
+            distance = nearest["distance"] if nearest is not None else None
+            inside = assigned_index is not None
+            proximity = 0.0 if distance is None else max(0.0, min(1.0, 1.0 - distance / max_distance))
+            current = nearest["current"] if nearest is not None else None
+            target = nearest["target"] if nearest is not None else None
+            source = nearest["source"] if nearest is not None else "NO DATA"
+            used_set = nearest["used_set"] if nearest is not None else "-"
+
+            colors[color] = {
+                "status": "OK" if inside else ("NO DATA" if current is None else ("CLOSE" if distance is not None and distance <= self._clear_dist * 2 else "FAR")),
+                "distance": distance,
+                "inside": inside,
+                "source": source,
+                "used_set": used_set,
+                "proximity": proximity,
+                "target": _vec_to_list(target),
+                "current": _vec_to_list(current),
+                "y_diff": nearest.get("y_diff") if nearest is not None else None,
+                "target_index": None if nearest_index is None else nearest_index + 1,
+                "matched_target_index": None if assigned_index is None else assigned_index + 1,
+                "target_count": len(target_slots),
+            }
+
+        return colors
 
     def _set_targets_from_pose(self, pose, ctx, set_a=None, set_b=None):
         sets = (pose or {}).get("sets", {})
-        missing = []
 
         if set_a is None:
-            ctx["targets_set"] = True
+            target_slots = self._target_slots_from_pose_sets(sets)
+            ctx["target_slots"] = target_slots
+            ctx["targets_set"] = bool(target_slots)
             ctx["current_pose_name"] = pose.get("name", "Saved pose")
             ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
-            ctx["message"] = f"Loaded pose: {ctx['current_pose_name']}"
+            ctx["message"] = (
+                f"Loaded pose: {ctx['current_pose_name']}"
+                if target_slots
+                else "Pose is missing target point data."
+            )
             return
+
+        allowed_sets = {"A"}
+        if set_b is not None:
+            allowed_sets.add("B")
+        target_slots = self._target_slots_from_pose_sets(sets, allowed_sets)
 
         for color in COLOR_ORDER:
             a_point = sets.get("A", {}).get(color)
@@ -301,15 +495,13 @@ class GameEngine:
             if set_b is not None:
                 set_b.states[color]["target"] = np.array(b_point, dtype=np.float64) if b_point is not None else None
 
-            if a_point is None and (set_b is None or b_point is None):
-                missing.append(color)
-
         difficulty = pose.get("difficulty", self._settings.get("difficulty", "medium"))
         self._settings["difficulty"] = difficulty
         self._apply_settings(self._settings)
         self._configure_core()
 
-        ctx["targets_set"] = not missing
+        ctx["target_slots"] = target_slots
+        ctx["targets_set"] = bool(target_slots)
         ctx["current_pose_name"] = pose.get("name", "Saved pose")
         ctx["current_pose_difficulty"] = difficulty
         ctx["game_state"] = GameState.IDLE
@@ -318,8 +510,8 @@ class GameEngine:
         ctx["hold_progress"] = 0.0
         ctx["message"] = (
             f"Loaded pose: {ctx['current_pose_name']}"
-            if not missing
-            else "Pose is missing target data for: " + ", ".join(missing)
+            if target_slots
+            else "Pose is missing target point data."
         )
 
     def _update_current_pose_cache(self, set_a=None, set_b=None, colors=None):
@@ -376,6 +568,7 @@ class GameEngine:
             elif cmd == "set_targets":
                 if set_a is None:
                     ctx["targets_set"] = True
+                    ctx["target_slots"] = []
                     ctx["current_pose_name"] = "Manual simulation pose"
                     ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
                     ctx["message"] = "Simulation target pose saved. Press START."
@@ -386,24 +579,20 @@ class GameEngine:
                 if set_b is not None:
                     saved_b, missing_b = set_b.set_targets_from_current()
 
-                missing_both = []
-                for color in COLOR_ORDER:
-                    a_target = set_a.states[color]["target"]
-                    b_target = set_b.states[color]["target"] if set_b is not None else None
-                    if a_target is None and b_target is None:
-                        missing_both.append(color)
+                target_slots = self._target_slots_from_current_targets(set_a, set_b)
 
-                ctx["targets_set"] = not missing_both
+                ctx["target_slots"] = target_slots
+                ctx["targets_set"] = bool(target_slots)
                 ctx["game_state"] = GameState.IDLE
                 ctx["pose_result"] = None
                 ctx["all_inside_t"] = None
                 ctx["hold_progress"] = 0.0
-                if missing_both:
-                    ctx["message"] = "Missing target data for: " + ", ".join(missing_both)
-                else:
+                if target_slots:
                     ctx["current_pose_name"] = "Manual target pose"
                     ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
-                    ctx["message"] = "Target pose saved. Press START."
+                    ctx["message"] = f"{len(target_slots)} target points saved. Press START."
+                else:
+                    ctx["message"] = "No visible target points were saved."
 
                 print(f"[WebEngine] targets saved A={saved_a} missingA={missing_a} B={saved_b} missingB={missing_b}")
 
@@ -423,6 +612,7 @@ class GameEngine:
                     ctx["message"] = "Set the next target pose."
 
                 ctx["targets_set"] = False
+                ctx["target_slots"] = []
                 ctx["all_inside_t"] = None
                 ctx["hold_progress"] = 0.0
                 if set_a is not None:
@@ -456,7 +646,19 @@ class GameEngine:
                 ctx["message"] = f"Round {ctx['round']}. Set the next target pose."
 
         targets_set = bool(ctx.get("targets_set", False))
-        all_inside = targets_set and all(colors[color]["inside"] for color in COLOR_ORDER)
+        target_count = len(ctx.get("target_slots") or [])
+        matched_count = len({
+            colors[color].get("matched_target_index")
+            for color in COLOR_ORDER
+            if colors[color].get("matched_target_index") is not None
+        })
+        all_inside = (
+            targets_set
+            and (
+                (target_count > 0 and matched_count >= target_count)
+                or (target_count == 0 and all(colors[color]["inside"] for color in COLOR_ORDER))
+            )
+        )
         ctx["all_inside"] = all_inside
         ctx["time_left"] = self._time_per_pose
         ctx["hold_progress"] = 0.0
@@ -681,7 +883,26 @@ class GameEngine:
                 for color in COLOR_ORDER:
                     final_states[color] = core.select_and_judge_color(color, set_a, set_b, last_used)
 
-                colors = self._colors_from_final(final_states)
+                if ctx.get("target_slots"):
+                    colors = self._color_agnostic_colors(
+                        ctx.get("target_slots") or [],
+                        self._current_points_from_sets(set_a, set_b),
+                    )
+                    # BLE feedback should follow the selected device toward its nearest open target.
+                    final_states = {
+                        color: {
+                            "used_set": colors[color].get("used_set", "-"),
+                            "source": colors[color].get("source", "NO DATA"),
+                            "current": np.array(colors[color]["current"], dtype=np.float64) if colors[color].get("current") is not None else None,
+                            "target": np.array(colors[color]["target"], dtype=np.float64) if colors[color].get("target") is not None else None,
+                            "distance": colors[color].get("distance"),
+                            "inside": colors[color].get("inside", False),
+                            "y_diff": colors[color].get("y_diff"),
+                        }
+                        for color in COLOR_ORDER
+                    }
+                else:
+                    colors = self._colors_from_final(final_states)
                 self._update_current_pose_cache(set_a, set_b)
                 self._tick_game(ctx, colors)
                 last_target_live_time = self._update_ble(
@@ -742,6 +963,12 @@ class GameEngine:
                     "current": [100.0 * i + distance, 50.0, 200.0],
                     "y_diff": 0.0,
                 }
+
+            if ctx.get("target_slots"):
+                colors = self._color_agnostic_colors(
+                    ctx.get("target_slots") or [],
+                    self._current_points_from_color_state(colors),
+                )
 
             self._tick_game(ctx, colors)
             self._update_current_pose_cache(colors=colors)
