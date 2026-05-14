@@ -17,6 +17,12 @@
         #fff;
       color: #090909;
     }
+    body.vs-active .player-wrap,
+    body.vs-active #overlay-countdown,
+    body.vs-active #overlay-result,
+    body.vs-active #overlay-end {
+      display: none !important;
+    }
     #stars { display: none; }
 
     .player-wrap {
@@ -128,6 +134,13 @@
       min-height: 2.5rem;
       transition: color 0.3s;
     }
+    .status-sub {
+      display: block;
+      margin-top: 0.85rem;
+      font-size: clamp(0.58rem, 1vw, 0.78rem);
+      line-height: 1.7;
+      color: #777;
+    }
 
     /* Hold bar */
     .hold-bar-wrap {
@@ -189,6 +202,35 @@
     .prox-card[data-color="GREEN"]  .prox-ring-arc { stroke: #4ade80; }
     .prox-card[data-color="GREEN"]  .prox-dot { background:#4ade80; }
     .prox-card[data-color="GREEN"]  .prox-label { color:#4ade80; }
+    .prox-status {
+      display: block;
+      margin-top: 0.38rem;
+      font-size: clamp(0.54rem, 0.9vw, 0.72rem);
+      color: #777;
+      line-height: 1.35;
+    }
+    .prox-status.connected { color: #16a34a; }
+    .prox-status.disconnected { color: #777; }
+
+    body.vs-prep .round-info,
+    body.vs-prep .timer-block,
+    body.vs-prep .scores-row {
+      display: none !important;
+    }
+    body.vs-prep .hud-top {
+      justify-content: flex-start;
+    }
+    body.vs-prep .middle {
+      gap: clamp(1.2rem, 3vh, 2rem);
+    }
+    body.vs-prep .prox-label {
+      font-size: clamp(0.8rem, 1.3vw, 1rem);
+      line-height: 1.35;
+      text-align: center;
+    }
+    body.vs-prep .turn-label {
+      color: #777;
+    }
 
     /* Pulsing animation when inside target */
     .prox-dot.inside {
@@ -510,6 +552,287 @@
     html[lang="ja"] .finish-modal-btn {
       font-size: clamp(1rem, 1.7vw, 1.25rem);
     }
+
+    .vs-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: clamp(1rem, 3vh, 2rem);
+      padding: clamp(4.5rem, 10vh, 6.5rem) clamp(1rem, 3vw, 2rem) clamp(1rem, 3vw, 2rem);
+      color: #fff;
+      background: var(--vs-bg, #1710c9);
+      text-align: center;
+      overflow: hidden;
+    }
+    #vsContent {
+      position: relative;
+      width: min(1100px, 94vw);
+      min-height: calc(100vh - clamp(5.5rem, 12vh, 8rem));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(1rem, 3vh, 2rem);
+      margin: 0 auto;
+    }
+    .vs-screen.winner-mode #vsContent {
+      width: min(1240px, 94vw);
+      min-height: min(88vh, 840px);
+    }
+    body.vs-active .vs-screen {
+      display: flex;
+    }
+    .vs-count-disc {
+      width: min(40vw, 390px, 48vh);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #fff;
+      color: var(--vs-bg, #1710c9);
+      display: grid;
+      place-items: center;
+      font-size: clamp(5rem, 17vw, 12rem);
+      line-height: 1;
+      box-shadow: 0 18px 0 rgba(0,0,0,0.12);
+    }
+    .vs-title {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(1.6rem, 5vw, 4.4rem);
+      line-height: 1.45;
+      color: #fff;
+    }
+    .vs-sub {
+      font-size: clamp(0.8rem, 1.4vw, 1.1rem);
+      line-height: 1.8;
+      max-width: 960px;
+    }
+    .vs-status-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(90px, 1fr));
+      gap: clamp(0.65rem, 1.5vw, 1rem);
+      width: min(900px, 90vw);
+    }
+    .vs-status-pill {
+      border: 4px solid #fff;
+      border-radius: 8px;
+      background: transparent;
+      color: #fff;
+      font-size: clamp(0.75rem, 1.4vw, 1.1rem);
+      padding: 0.55rem 0.4rem 0.45rem;
+    }
+    .vs-status-pill.done {
+      background: #fff;
+      color: var(--vs-bg, #1710c9);
+    }
+    .vs-compare {
+      display: grid;
+      grid-template-columns: 1fr 10px 1fr;
+      width: min(1120px, 94vw);
+      min-height: 72vh;
+      background: #fff;
+      color: #111;
+    }
+    .vs-column {
+      background: var(--col-bg);
+      color: #fff;
+      padding: clamp(1rem, 2vw, 2rem);
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 1rem;
+    }
+    .vs-divider { background: #fff; }
+    .vs-photo {
+      width: min(360px, 36vw);
+      aspect-ratio: 16 / 9;
+      background: #fff;
+      border-radius: 16px;
+      object-fit: cover;
+    }
+    .vs-arrow {
+      width: 0;
+      height: 0;
+      border-left: 22px solid transparent;
+      border-right: 22px solid transparent;
+      border-top: 32px solid #fff;
+    }
+    .vs-time {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #fff;
+      color: #444;
+      border-radius: 14px;
+      padding: 0.35rem 0.7rem;
+      font-size: clamp(1rem, 2.4vw, 2rem);
+    }
+    .vs-small-btn {
+      border: 0;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--vs-bg, #111);
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.7rem, 1.3vw, 1rem);
+      padding: 0.8rem 1.2rem 0.7rem;
+      cursor: pointer;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.18);
+    }
+    .vs-winner-dots {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .vs-winner-dot {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      width: var(--s);
+      height: var(--s);
+      border-radius: 30%;
+      background: var(--c);
+      opacity: 0.82;
+      box-shadow: 0 0 24px color-mix(in srgb, var(--c) 82%, transparent);
+      animation: vs-winner-float var(--d) ease-in-out infinite alternate;
+      animation-delay: var(--delay);
+    }
+    .vs-winner-layout {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: clamp(1rem, 2.7vh, 2.15rem);
+      padding-block: clamp(2.2rem, 6vh, 4rem) clamp(0.5rem, 1.8vh, 1.4rem);
+    }
+    .vs-winner-reveal {
+      animation: vs-winner-reveal 960ms steps(7, end) both;
+    }
+    .vs-top-brand {
+      position: fixed;
+      z-index: 2;
+      top: clamp(1rem, 2.8vh, 1.8rem);
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.9rem, 1.8vw, 1.45rem);
+      line-height: 1;
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.94);
+      text-shadow: 0 4px 0 rgba(0, 0, 0, 0.14);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .vs-brand {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.9rem, 1.7vw, 1.35rem);
+      line-height: 1;
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 4px 0 rgba(0, 0, 0, 0.12);
+    }
+    .vs-winner-kicker {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 4px solid #fff;
+      border-radius: 999px;
+      padding: 0.5rem 1rem 0.42rem;
+      font-size: clamp(0.7rem, 1.3vw, 1rem);
+      line-height: 1.2;
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 0 rgba(0, 0, 0, 0.14);
+    }
+    .vs-winner-title {
+      font-size: clamp(1.9rem, 4.6vw, 3.8rem);
+      line-height: 1.18;
+      max-width: min(1120px, 92vw);
+      text-shadow: 0 7px 0 rgba(0, 0, 0, 0.14);
+    }
+    .vs-winner-name {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(1.8rem, 4.2vw, 3.6rem);
+      line-height: 1.1;
+      color: #fff;
+      text-shadow: 0 7px 0 rgba(0, 0, 0, 0.14);
+      max-width: 96vw;
+      overflow-wrap: anywhere;
+    }
+    .vs-winner-time {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.85rem, 1.6vw, 1.25rem);
+      line-height: 1.45;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.18);
+      border: 4px solid rgba(255, 255, 255, 0.9);
+      border-radius: 999px;
+      padding: 0.75rem 1.2rem 0.65rem;
+    }
+    .vs-winner-photos {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: clamp(1.2rem, 2.5vw, 2.2rem);
+      margin-top: clamp(0.2rem, 1vh, 0.75rem);
+    }
+    .vs-winner-photos .vs-photo {
+      width: min(380px, 36vw);
+      border: 5px solid #fff;
+      box-shadow: 0 12px 0 rgba(0, 0, 0, 0.18);
+    }
+    .vs-winner-actions {
+      margin-top: clamp(0.4rem, 1.5vh, 1rem);
+    }
+    .vs-winner-actions .vs-small-btn {
+      min-width: 190px;
+      padding-inline: 1.65rem;
+    }
+    @keyframes vs-winner-float {
+      from {
+        transform: translate3d(-10px, 10px, 0) rotate(-9deg) scale(0.92);
+      }
+      to {
+        transform: translate3d(14px, -18px, 0) rotate(12deg) scale(1.12);
+      }
+    }
+    @keyframes vs-winner-reveal {
+      0% {
+        opacity: 0;
+        transform: scale(0.88);
+        filter: brightness(0.2);
+      }
+      38% {
+        opacity: 1;
+        transform: scale(1.06);
+        filter: brightness(1.55);
+      }
+      62% {
+        transform: scale(0.98);
+        filter: brightness(0.9);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+        filter: brightness(1);
+      }
+    }
+    html[lang="ja"] .vs-title,
+    html[lang="ja"] .vs-sub,
+    html[lang="ja"] .vs-status-pill,
+    html[lang="ja"] .vs-small-btn,
+    html[lang="ja"] .vs-top-brand,
+    html[lang="ja"] .vs-winner-kicker,
+    html[lang="ja"] .vs-winner-name,
+    html[lang="ja"] .vs-winner-time {
+      font-family: 'DotGothic16', 'Press Start 2P', monospace;
+    }
   </style>
 </head>
 <body>
@@ -611,6 +934,10 @@
     </div>
   </div>
 
+  <div class="vs-screen" id="vsScreen">
+    <div id="vsContent"></div>
+  </div>
+
   <!-- Required by browser autoplay policy. Operator controls the actual volumes. -->
   <div id="audioUnlock">
     <div class="audio-unlock-panel">
@@ -636,6 +963,31 @@
         finishText: 'This will reset the game, player names, and scores, then return to the welcome screen.',
         finishCancel: 'CANCEL',
         finishConfirm: 'FINISH',
+        vsPoseReady: 'POSE!',
+        vsSetupReady: '{player}: get ready',
+        vsSetupPose: '{player}: set pose {current} / {total}. Other player should hide.',
+        vsChallengeReady: '{player}: get ready. Time starts after GO!',
+        vsSetupCompleteTitle: 'POSES SET!',
+        vsSetupCompleteText: 'All {total} poses saved. Challenger puts on the devices. Operator presses START when ready.',
+        vsChallengeLine: 'Challenge {current} / {total}',
+        vsTimeMeasured: 'Time is being measured.',
+        vsTurnClearTitle: 'TURN CLEAR!',
+        vsTurnClearText: 'First turn complete. Switch players. Operator presses START for the next setup.',
+        vsResultsTitle: 'RESULTS',
+        vsNext: 'NEXT',
+        vsWinner: 'WINNER',
+        vsCongratulations: 'CONGRATULATIONS',
+        vsLapTime: '{time} seconds',
+        vsWinnerTime: 'Winner time: {time} seconds',
+        startingPlayer: 'STARTING PLAYER',
+        connected: 'Connected',
+        notConnected: 'Not Connected',
+        colorRed: 'RED',
+        colorYellow: 'YELLOW',
+        colorBlue: 'BLUE',
+        colorGreen: 'GREEN',
+        areYouReady: 'Are you ready?',
+        waitingOperatorStart: 'Waiting for operator to start the game.',
       },
       ja: {
         audioTitle: 'プレイヤー音声',
@@ -647,6 +999,31 @@
         finishText: 'ゲーム、プレイヤー名、スコアをリセットして、ウェルカム画面に戻ります。',
         finishCancel: 'キャンセル',
         finishConfirm: '終了',
+        vsPoseReady: 'ポーズ!',
+        vsSetupReady: '{player}: じゅんび',
+        vsSetupPose: '{player}: ポーズ {current} / {total} をセット。相手は見ないでください。',
+        vsChallengeReady: '{player}: じゅんび。GO! のあとに時間をはかります。',
+        vsSetupCompleteTitle: 'お題ポーズ<br>セット!',
+        vsSetupCompleteText: '{total}つのポーズを保存しました。チャレンジャーはデバイスをつけて、オペレーターがSTARTを押してください。',
+        vsChallengeLine: 'チャレンジ {current} / {total}',
+        vsTimeMeasured: '時間をはかっています。',
+        vsTurnClearTitle: 'ターンクリア!',
+        vsTurnClearText: '最初のターンが終わりました。プレイヤーを交代して、オペレーターが次のセットアップを開始してください。',
+        vsResultsTitle: 'リザルト',
+        vsNext: 'つぎへ',
+        vsWinner: '勝者',
+        vsCongratulations: 'おめでとう!',
+        vsLapTime: '{time} 秒',
+        vsWinnerTime: '勝者タイム: {time} 秒',
+        startingPlayer: '先攻プレイヤー',
+        connected: '接続済み',
+        notConnected: '未接続',
+        colorRed: '赤',
+        colorYellow: '黄',
+        colorBlue: '青',
+        colorGreen: '緑',
+        areYouReady: 'じゅんびはいいですか？',
+        waitingOperatorStart: 'オペレーターがゲームを開始するのを待っています。',
       },
     };
     (function applyPlayerLanguage() {

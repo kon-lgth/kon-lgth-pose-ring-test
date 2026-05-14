@@ -5,26 +5,14 @@ import json
 import time
 import os
 import glob
-import threading
-from flask import Flask, Response
 
 # ============================================================
-# PoseRing B Set UDP Sender + Video Server
+# PoseRing B Set UDP Sender
 #
 # サブPC用：
 # Bセットカメラ2台で赤・黄・青・緑の3D座標を計算し、
 # UDPでメインPCへ送信する。
-#
-# 追加機能：
-# 同じカメラ映像をMJPEGでWeb配信する。
-# これにより、sub_bset_video_server.py を別起動しなくても、
-# mainPCのoperator画面でB CAM 0 / B CAM 1を確認できる。
-#
-# 重要：
-# カメラを開くのはこのプログラム1つだけ。
-# UDP送信用と映像配信用でカメラを二重に開かない。
 # ============================================================
-
 
 def get_latest_calibration_file(prefix="calib_B_20"):
     """
@@ -51,27 +39,22 @@ def get_latest_calibration_file(prefix="calib_B_20"):
 
     return latest_file
 
-
 # =========================
 # UDP送信設定
 # =========================
-# mainPCのIPv4アドレス。
-# mainPCのモバイルホットスポットを使う場合、通常は 192.168.137.1。
-# 必要に応じてPowerShell側で以下のように上書き可能：
-#   $env:POSERING_MAIN_PC_IP="192.168.137.1"
-MAIN_PC_IP = os.getenv("POSERING_MAIN_PC_IP", "192.168.137.1")
-UDP_PORT = int(os.getenv("POSERING_UDP_PORT", "5005"))
+# メインPCのIPv4アドレスに変更する
+MAIN_PC_IP = "10.0.1.124"
+UDP_PORT = 5005
 
 # =========================
 # Bセット設定
 # =========================
 CALIB_FILE = get_latest_calibration_file("calib_B_20")
 
-# subPC側で正しく映ったBカメラ番号に合わせる
-CAM0_INDEX = int(os.getenv("POSERING_B_CAM0", "0"))
-CAM1_INDEX = int(os.getenv("POSERING_B_CAM1", "2"))
+CAM0_INDEX = 0
+CAM1_INDEX = 2
 
-BACKEND = os.getenv("POSERING_B_BACKEND", "DSHOW")
+BACKEND = "DSHOW"
 
 CAPTURE_W = 640
 CAPTURE_H = 480
@@ -94,22 +77,6 @@ MIN_AREA_BY_COLOR = {
 }
 
 kernel = np.ones((5, 5), np.uint8)
-
-# =========================
-# Bカメラ映像配信設定
-# =========================
-ENABLE_VIDEO_SERVER = True
-VIDEO_HOST = "0.0.0.0"
-VIDEO_PORT = int(os.getenv("POSERING_SUB_VIDEO_PORT", "5010"))
-JPEG_QUALITY = 70
-
-app = Flask(__name__)
-video_lock = threading.Lock()
-latest_video_frames = {
-    "b_cam0": None,
-    "b_cam1": None,
-}
-
 
 # =========================
 # HSV設定
@@ -197,7 +164,6 @@ def open_camera(index):
 
     for _ in range(10):
         cap.read()
-        time.sleep(0.02)
 
     return cap
 
@@ -210,123 +176,6 @@ def maybe_flip_for_display(img):
 
 def resize_view(img):
     return cv2.resize(img, (VIEW_W, VIEW_H))
-
-
-def update_video_frame(name, frame):
-    """MJPEG配信用に最新フレームを保存する。"""
-    if frame is None:
-        return
-
-    with video_lock:
-        latest_video_frames[name] = frame.copy()
-
-
-def get_jpeg_frame(name):
-    with video_lock:
-        frame = latest_video_frames.get(name)
-        if frame is None:
-            return None
-        frame = frame.copy()
-
-    ok, buffer = cv2.imencode(
-        ".jpg",
-        frame,
-        [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY],
-    )
-
-    if not ok:
-        return None
-
-    return buffer.tobytes()
-
-
-def mjpeg_generator(name):
-    while True:
-        jpeg = get_jpeg_frame(name)
-
-        if jpeg is None:
-            time.sleep(0.1)
-            continue
-
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n"
-            + jpeg
-            + b"\r\n"
-        )
-
-        time.sleep(1.0 / FPS)
-
-
-@app.route("/")
-def video_index():
-    return """
-    <html>
-      <head>
-        <title>PoseRing B Camera UDP + Video</title>
-      </head>
-      <body style="font-family: sans-serif; background:#111; color:#eee;">
-        <h1>PoseRing B Camera UDP + Video</h1>
-        <p>This server sends B-set 3D data by UDP and streams B camera images.</p>
-        <p><a href="/b_cam0" style="color:#8cf;">Open B CAM 0 only</a></p>
-        <p><a href="/b_cam1" style="color:#8cf;">Open B CAM 1 only</a></p>
-        <div style="display:flex; gap:16px; flex-wrap:wrap;">
-          <div>
-            <h2>B CAM 0</h2>
-            <img src="/b_cam0" width="480">
-          </div>
-          <div>
-            <h2>B CAM 1</h2>
-            <img src="/b_cam1" width="480">
-          </div>
-        </div>
-      </body>
-    </html>
-    """
-
-
-@app.route("/b_cam0")
-def b_cam0():
-    return Response(
-        mjpeg_generator("b_cam0"),
-        mimetype="multipart/x-mixed-replace; boundary=frame",
-    )
-
-
-@app.route("/b_cam1")
-def b_cam1():
-    return Response(
-        mjpeg_generator("b_cam1"),
-        mimetype="multipart/x-mixed-replace; boundary=frame",
-    )
-
-
-def start_video_server_in_background():
-    """Flask映像配信サーバーを別スレッドで起動する。"""
-    if not ENABLE_VIDEO_SERVER:
-        return None
-
-    def run_server():
-        app.run(
-            host=VIDEO_HOST,
-            port=VIDEO_PORT,
-            debug=False,
-            threaded=True,
-            use_reloader=False,
-        )
-
-    thread = threading.Thread(target=run_server, daemon=True)
-    thread.start()
-
-    print("======================================")
-    print("B Camera Video Server started")
-    print(f"Open on subPC : http://localhost:{VIDEO_PORT}/")
-    print(f"Open on mainPC: http://<SUB_PC_IP>:{VIDEO_PORT}/")
-    print(f"B CAM 0       : http://<SUB_PC_IP>:{VIDEO_PORT}/b_cam0")
-    print(f"B CAM 1       : http://<SUB_PC_IP>:{VIDEO_PORT}/b_cam1")
-    print("======================================")
-
-    return thread
 
 
 def detect_color_center(source_frame, draw_frame, color_name):
@@ -399,13 +248,12 @@ def get_marker_3d(res0, res1, P0, P1):
 
 def main():
     print("======================================")
-    print("PoseRing B Set UDP Sender + Video Server")
-    print(f"MAIN_PC_IP : {MAIN_PC_IP}")
-    print(f"UDP_PORT   : {UDP_PORT}")
-    print(f"VIDEO_PORT : {VIDEO_PORT}")
-    print(f"CALIB_FILE : {CALIB_FILE}")
-    print(f"CAMERAS    : {CAM0_INDEX}, {CAM1_INDEX}")
-    print("q / Esc    : quit")
+    print("PoseRing B Set UDP Sender")
+    print(f"MAIN_PC_IP: {MAIN_PC_IP}")
+    print(f"UDP_PORT  : {UDP_PORT}")
+    print(f"CALIB_FILE: {CALIB_FILE}")
+    print(f"CAMERAS   : {CAM0_INDEX}, {CAM1_INDEX}")
+    print("q / Esc   : quit")
     print("======================================")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -420,10 +268,6 @@ def main():
 
     cap0 = open_camera(CAM0_INDEX)
     cap1 = open_camera(CAM1_INDEX)
-
-    # カメラを開いた後に、同じフレームを使って映像配信する。
-    # ここではカメラを二重に開かない。
-    start_video_server_in_background()
 
     frame_count = 0
     last_send_time = 0.0
@@ -505,13 +349,8 @@ def main():
             cv2.putText(disp1, f"B Cam1 Index {CAM1_INDEX}", (10, 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
-            # operator画面で見る映像は、この処理済み表示フレームを使う。
-            # そのため、矩形・中心点・検出メッセージもブラウザ側で確認できる。
-            update_video_frame("b_cam0", disp0)
-            update_video_frame("b_cam1", disp1)
-
             display = np.hstack((resize_view(disp0), resize_view(disp1)))
-            cv2.imshow("Sub PC B Set UDP Sender + Video", display)
+            cv2.imshow("Sub PC B Set UDP Sender", display)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q") or key == 27:

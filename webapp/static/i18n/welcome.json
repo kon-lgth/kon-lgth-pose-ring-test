@@ -50,7 +50,7 @@
     "preferredColor": "色",
     "confirmReady": "OK!",
     "jankenMain": "じゃんけんで先攻・後攻をきめよう！",
-    "jankenSub": "Determine who goes first and second.",
+    "jankenSub": "先攻と後攻を決めます。",
     "goesFirst": "が先攻"
   }
 }
