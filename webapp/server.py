@@ -130,6 +130,7 @@ POSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poses.jso
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 VS_POSES_PER_TURN = 5
 VS_SETUP_SECONDS = 10
+VS_MIN_TARGET_POINTS = max(1, _env_int("POSERING_VS_MIN_TARGET_POINTS", len(COLOR_ORDER)))
 
 VS_SESSION = {
     "active": False,
@@ -182,19 +183,50 @@ def _front_camera_b64():
     return base64.b64encode(jpeg).decode("ascii")
 
 
-def _snapshot_has_all_colors(snapshot):
+def _snapshot_target_points(snapshot):
     sets = (snapshot or {}).get("sets") or {}
-    if not sets:
-        return False
+    points = []
+    seen = set()
+    target_points = (snapshot or {}).get("target_points") or []
+    if isinstance(target_points, list):
+        for item in target_points:
+            if not isinstance(item, dict):
+                continue
+            point = item.get("point")
+            if point is None:
+                continue
+            key = (item.get("set") or "-", item.get("source_color") or len(points))
+            if key in seen:
+                continue
+            seen.add(key)
+            points.append(item)
+
+    if points:
+        return points
+
     for color in COLOR_ORDER:
-        found = False
-        for points in sets.values():
-            if isinstance(points, dict) and points.get(color) is not None:
-                found = True
-                break
-        if not found:
-            return False
-    return True
+        for set_name, set_points in sets.items():
+            if isinstance(set_points, dict) and set_points.get(color) is not None:
+                key = (set_name, color)
+                if key in seen:
+                    continue
+                seen.add(key)
+                points.append({
+                    "set": set_name,
+                    "source_color": color,
+                    "point": set_points.get(color),
+                })
+    return points
+
+
+def _snapshot_has_target_points(snapshot):
+    return len(_snapshot_target_points(snapshot)) >= VS_MIN_TARGET_POINTS
+
+
+def _snapshot_missing_colors(snapshot):
+    points = _snapshot_target_points(snapshot)
+    found = {item.get("source_color") for item in points if item.get("source_color")}
+    return [color for color in COLOR_ORDER if color not in found]
 
 
 def _current_vs_players():
@@ -664,9 +696,18 @@ def on_vs_capture_setup_pose():
     if turn_index >= len(VS_SESSION.get("turns", [])):
         return
     snapshot = engine.get_current_pose_snapshot()
-    if not _snapshot_has_all_colors(snapshot):
-        VS_SESSION["message"] = "Cannot save pose: all colors must be visible."
-        _emit_vs({"error": VS_SESSION["message"], "capture_ok": False})
+    target_points = _snapshot_target_points(snapshot)
+    if len(target_points) < VS_MIN_TARGET_POINTS:
+        missing = _snapshot_missing_colors(snapshot)
+        missing_text = ", ".join(missing) if missing else "target points"
+        VS_SESSION["message"] = f"Cannot save pose: {missing_text} not detected."
+        _emit_vs({
+            "error": VS_SESSION["message"],
+            "capture_ok": False,
+            "missing_colors": missing,
+            "target_point_count": len(target_points),
+            "required_target_points": VS_MIN_TARGET_POINTS,
+        })
         return
     idx = int(VS_SESSION.get("current_index", 0))
     pose = {
@@ -675,6 +716,7 @@ def on_vs_capture_setup_pose():
         "difficulty": "medium",
         "created_at": time.time(),
         "sets": snapshot["sets"],
+        "target_point_count": len(target_points),
         "source": snapshot.get("source", "live"),
     }
     VS_SESSION["turns"][turn_index].setdefault("setup", []).append({
@@ -690,8 +732,8 @@ def on_vs_capture_setup_pose():
             "message": "All setup poses saved. Press START when the challenger is ready.",
         })
     else:
-        VS_SESSION["message"] = f"Pose {idx + 1} saved."
-    _emit_vs({"capture_ok": True})
+        VS_SESSION["message"] = f"Pose {idx + 1} saved with {len(target_points)} target points."
+    _emit_vs({"capture_ok": True, "target_point_count": len(target_points)})
 
 
 @socketio.on("cmd_vs_begin_challenge_after_ready")

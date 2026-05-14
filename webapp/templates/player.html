@@ -680,6 +680,61 @@
       cursor: pointer;
       box-shadow: 0 8px 0 rgba(0,0,0,0.18);
     }
+    .vs-capture-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 180;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background: rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(4px);
+    }
+    .vs-capture-modal-backdrop.show {
+      display: flex;
+    }
+    .vs-capture-modal {
+      width: min(680px, 90vw);
+      border: 5px solid #111;
+      border-radius: 34px;
+      background: #fff;
+      color: #111;
+      padding: clamp(1.2rem, 3vw, 2.2rem);
+      box-shadow: 0 14px 0 rgba(0, 0, 0, 0.24), 0 24px 36px rgba(0, 0, 0, 0.18);
+      text-align: center;
+    }
+    .vs-capture-modal-title {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(1rem, 2.5vw, 1.8rem);
+      line-height: 1.55;
+      margin-bottom: 1rem;
+    }
+    .vs-capture-modal-text {
+      color: #666;
+      font-size: clamp(0.68rem, 1.25vw, 0.95rem);
+      line-height: 1.85;
+      margin-bottom: 1.4rem;
+    }
+    .vs-capture-modal-btn {
+      border: 0;
+      border-radius: 999px;
+      background: #111;
+      color: #fff;
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(0.72rem, 1.35vw, 1rem);
+      line-height: 1.35;
+      padding: 0.9rem 1.5rem 0.8rem;
+      cursor: pointer;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.25);
+    }
+    html[lang="ja"] .vs-capture-modal-title {
+      font-size: clamp(1.2rem, 2.8vw, 2rem);
+    }
+    html[lang="ja"] .vs-capture-modal-text,
+    html[lang="ja"] .vs-capture-modal-btn {
+      font-size: clamp(0.95rem, 1.6vw, 1.25rem);
+    }
     .vs-winner-dots {
       position: fixed;
       inset: 0;
@@ -988,6 +1043,10 @@
         colorGreen: 'GREEN',
         areYouReady: 'Are you ready?',
         waitingOperatorStart: 'Waiting for operator to start the game.',
+        vsCaptureMissingTitle: 'POSE NOT SAVED',
+        vsCaptureMissingText: 'These colors were not detected: {colors}. Make sure every device is visible, then try again.',
+        vsCaptureGenericText: 'The pose could not be saved because not enough target points were detected. Check the devices and try again.',
+        vsTryAgain: 'TRY AGAIN',
       },
       ja: {
         audioTitle: 'プレイヤー音声',
@@ -1024,6 +1083,10 @@
         colorGreen: '緑',
         areYouReady: 'じゅんびはいいですか？',
         waitingOperatorStart: 'オペレーターがゲームを開始するのを待っています。',
+        vsCaptureMissingTitle: 'ポーズを保存できません',
+        vsCaptureMissingText: '検出できない色: {colors}。すべてのデバイスがカメラに見えるようにして、もう一度試してください。',
+        vsCaptureGenericText: '検出されたポイントが足りないため、ポーズを保存できませんでした。デバイスを確認してもう一度試してください。',
+        vsTryAgain: 'もう一度',
       },
     };
     (function applyPlayerLanguage() {

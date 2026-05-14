@@ -514,6 +514,7 @@ let _vsWinnerPlayed = false;
 let _vsLastSetupCount = 0;
 let _vsChallengeReadyKey = '';
 let _vsSetupReadyShownKey = '';
+let _vsCaptureError = null;
 
 function vsColorFor(name, fallback = '#1710c9') {
   return (_vsState && _vsState.player_colors && _vsState.player_colors[name]) || fallback;
@@ -535,6 +536,42 @@ function vsPills(doneCount) {
 
 function vsTopBrand() {
   return '<div class="vs-top-brand">-PoseRing-</div>';
+}
+
+function vsMissingColorNames(colors) {
+  const names = {
+    RED: getPlayerText('colorRed'),
+    YELLOW: getPlayerText('colorYellow'),
+    BLUE: getPlayerText('colorBlue'),
+    GREEN: getPlayerText('colorGreen'),
+  };
+  return (colors || []).map(color => names[color] || color).join(', ');
+}
+
+function vsCaptureModalHtml(error) {
+  const missing = vsMissingColorNames(error && error.missing_colors);
+  const detail = missing
+    ? formatPlayerText('vsCaptureMissingText', { colors: escapeHtml(missing) })
+    : getPlayerText('vsCaptureGenericText');
+  return `
+    <div class="vs-capture-modal-backdrop show">
+      <div class="vs-capture-modal">
+        <div class="vs-capture-modal-title">${getPlayerText('vsCaptureMissingTitle')}</div>
+        <div class="vs-capture-modal-text">${detail}</div>
+        <button class="vs-capture-modal-btn" type="button" onclick="retryVsSetupCapture()">${getPlayerText('vsTryAgain')}</button>
+      </div>
+    </div>
+  `;
+}
+
+function retryVsSetupCapture() {
+  _vsCaptureError = null;
+  _vsCountdownKey = '';
+  clearInterval(_vsCountdownTimer);
+  _vsCountdownTimer = null;
+  if (_vsState && _vsState.phase === 'setup') {
+    startVsSetupCountdown(_vsState);
+  }
 }
 
 function startVsSetupCountdown(state) {
@@ -651,8 +688,23 @@ function renderVsState(state) {
     sound.setMusicMode('setup');
     if ((state.current_index || 0) > _vsLastSetupCount) {
       sound.playRoundEnd();
+      _vsCaptureError = null;
     }
     _vsLastSetupCount = state.current_index || 0;
+    if (_vsCaptureError) {
+      clearInterval(_vsCountdownTimer);
+      _vsCountdownTimer = null;
+      const creator = state.creator || 'Player';
+      screen.style.setProperty('--vs-bg', vsBgFor(creator, '#1710c9'));
+      content.innerHTML = `
+        ${vsTopBrand()}
+        <div class="vs-count-disc">${Math.max(0, _vsCountdownValue)}</div>
+        <div class="vs-sub">${formatPlayerText('vsSetupPose', { player: escapeHtml(creator), current: (state.current_index || 0) + 1, total: state.poses_per_turn })}</div>
+        ${vsPills(state.current_index || 0)}
+        ${vsCaptureModalHtml(_vsCaptureError)}
+      `;
+      return;
+    }
     startVsSetupCountdown(state);
     return;
   }
@@ -1367,6 +1419,16 @@ socket.on('lobby_setup', setup => {
 });
 
 socket.on('vs_state', state => {
+  if (state && state.capture_ok === false) {
+    _vsCaptureError = {
+      message: state.error || state.message || '',
+      missing_colors: state.missing_colors || [],
+      target_point_count: state.target_point_count || 0,
+      required_target_points: state.required_target_points || 0,
+    };
+  } else if (state && state.capture_ok === true) {
+    _vsCaptureError = null;
+  }
   renderVsState(state);
 });
 

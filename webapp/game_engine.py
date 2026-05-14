@@ -530,9 +530,24 @@ class GameEngine:
                 if set_b is not None:
                     sets["B"][color] = _vec_to_list(set_b.states[color].get("current_point"))
 
+        target_points = []
+        for set_name, set_points in sets.items():
+            if not isinstance(set_points, dict):
+                continue
+            for color in COLOR_ORDER:
+                point = set_points.get(color)
+                if point is not None:
+                    target_points.append({
+                        "set": set_name,
+                        "source_color": color,
+                        "point": point,
+                    })
+
         with self._lock:
             self._current_pose = {
                 "sets": sets,
+                "target_points": target_points,
+                "target_point_count": len(target_points),
                 "captured_at": time.time(),
                 "source": "simulation" if set_a is None else "live",
             }
