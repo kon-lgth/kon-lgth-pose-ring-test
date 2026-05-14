@@ -114,19 +114,24 @@ latest_video_frames = {
 # =========================
 # HSV設定
 # =========================
-LOWER_RED_1 = np.array([0, 140, 80])
-UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 140, 80])
+# 赤：はっきりした赤だけ拾う。背景誤検知を減らすためかなり厳しめ
+LOWER_RED_1 = np.array([0, 190, 110])
+UPPER_RED_1 = np.array([7, 255, 255])
+LOWER_RED_2 = np.array([174, 190, 110])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-LOWER_YELLOW = np.array([22, 120, 120])
-UPPER_YELLOW = np.array([34, 255, 255])
+# 黄色：はっきりした黄色だけ拾う。肌色・床・照明を拾いにくくする
+LOWER_YELLOW = np.array([24, 170, 150])
+UPPER_YELLOW = np.array([32, 255, 255])
 
-LOWER_BLUE = np.array([100, 170, 80])
-UPPER_BLUE = np.array([125, 255, 255])
+# 青：背景は拾っていないので、少しだけ検知しやすくする
+LOWER_BLUE = np.array([85, 60, 30])
+UPPER_BLUE = np.array([140, 255, 255])
 
-LOWER_GREEN = np.array([45, 100, 80])
-UPPER_GREEN = np.array([80, 255, 255])
+# 緑：濃い緑対象物向け
+# 背景を避けるためH範囲を少し絞るが、濃い緑は暗いのでV下限は低めにする
+LOWER_GREEN = np.array([45, 70, 25])
+UPPER_GREEN = np.array([85, 255, 180])
 
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
