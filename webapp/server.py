@@ -697,8 +697,8 @@ def on_vs_capture_setup_pose():
         return
     snapshot = engine.get_current_pose_snapshot()
     target_points = _snapshot_target_points(snapshot)
-    if len(target_points) < VS_MIN_TARGET_POINTS:
-        missing = _snapshot_missing_colors(snapshot)
+    missing = _snapshot_missing_colors(snapshot)
+    if missing or len(target_points) < VS_MIN_TARGET_POINTS:
         missing_text = ", ".join(missing) if missing else "target points"
         VS_SESSION["message"] = f"Cannot save pose: {missing_text} not detected."
         _emit_vs({

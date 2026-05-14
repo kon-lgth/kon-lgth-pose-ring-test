@@ -281,6 +281,7 @@ class GameEngine:
             "current_pose_name": None,
             "current_pose_difficulty": self._settings.get("difficulty", "medium"),
             "target_slots": [],
+            "target_claims": {},
         }
 
     def _target_slots_from_pose_sets(self, sets, allowed_sets=None):
@@ -405,7 +406,51 @@ class GameEngine:
         walk(0, set(), {}, 0.0)
         return best["assignment"]
 
-    def _color_agnostic_colors(self, target_slots, current_by_color):
+    def _claim_color_target_assignment(self, distance_matrix, target_claims):
+        claims = {}
+        for target_index, color in (target_claims or {}).items():
+            try:
+                target_index = int(target_index)
+            except (TypeError, ValueError):
+                continue
+            if color in COLOR_ORDER and 0 <= target_index < len(distance_matrix):
+                claims[target_index] = color
+
+        assignment = {}
+        used_colors = set()
+        release_distance = self._clear_dist * 1.25
+
+        for target_index, color in list(claims.items()):
+            distance = distance_matrix[target_index].get(color)
+            if distance is None or distance > release_distance or color in used_colors:
+                claims.pop(target_index, None)
+                continue
+            if distance <= self._clear_dist:
+                assignment[color] = target_index
+                used_colors.add(color)
+
+        candidates = []
+        for target_index, row in enumerate(distance_matrix):
+            if target_index in claims:
+                continue
+            for color, distance in row.items():
+                if color in used_colors or distance > self._clear_dist:
+                    continue
+                candidates.append((distance, target_index, color))
+
+        for distance, target_index, color in sorted(candidates, key=lambda item: item[0]):
+            if target_index in claims or color in used_colors:
+                continue
+            claims[target_index] = color
+            assignment[color] = target_index
+            used_colors.add(color)
+
+        if target_claims is not None:
+            target_claims.clear()
+            target_claims.update(claims)
+        return assignment, claims
+
+    def _color_agnostic_colors(self, target_slots, current_by_color, target_claims=None):
         colors = {}
         distance_matrix = []
         details_by_target = []
@@ -421,7 +466,7 @@ class GameEngine:
             distance_matrix.append(row)
             details_by_target.append(details)
 
-        assignment = self._solve_color_target_assignment(distance_matrix)
+        assignment, claims = self._claim_color_target_assignment(distance_matrix, target_claims)
         assigned_by_color = {color: target_index for color, target_index in assignment.items()}
         max_distance = max(self._clear_dist * 3.0, 1.0)
 
@@ -429,6 +474,8 @@ class GameEngine:
             nearest = None
             nearest_index = None
             for target_index, details in enumerate(details_by_target):
+                if claims.get(target_index) not in (None, color):
+                    continue
                 detail = details.get(color)
                 if detail is None:
                     continue
@@ -472,6 +519,7 @@ class GameEngine:
         if set_a is None:
             target_slots = self._target_slots_from_pose_sets(sets)
             ctx["target_slots"] = target_slots
+            ctx["target_claims"] = {}
             ctx["targets_set"] = bool(target_slots)
             ctx["current_pose_name"] = pose.get("name", "Saved pose")
             ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
@@ -501,6 +549,7 @@ class GameEngine:
         self._configure_core()
 
         ctx["target_slots"] = target_slots
+        ctx["target_claims"] = {}
         ctx["targets_set"] = bool(target_slots)
         ctx["current_pose_name"] = pose.get("name", "Saved pose")
         ctx["current_pose_difficulty"] = difficulty
@@ -584,6 +633,7 @@ class GameEngine:
                 if set_a is None:
                     ctx["targets_set"] = True
                     ctx["target_slots"] = []
+                    ctx["target_claims"] = {}
                     ctx["current_pose_name"] = "Manual simulation pose"
                     ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
                     ctx["message"] = "Simulation target pose saved. Press START."
@@ -597,6 +647,7 @@ class GameEngine:
                 target_slots = self._target_slots_from_current_targets(set_a, set_b)
 
                 ctx["target_slots"] = target_slots
+                ctx["target_claims"] = {}
                 ctx["targets_set"] = bool(target_slots)
                 ctx["game_state"] = GameState.IDLE
                 ctx["pose_result"] = None
@@ -628,6 +679,7 @@ class GameEngine:
 
                 ctx["targets_set"] = False
                 ctx["target_slots"] = []
+                ctx["target_claims"] = {}
                 ctx["all_inside_t"] = None
                 ctx["hold_progress"] = 0.0
                 if set_a is not None:
@@ -902,6 +954,7 @@ class GameEngine:
                     colors = self._color_agnostic_colors(
                         ctx.get("target_slots") or [],
                         self._current_points_from_sets(set_a, set_b),
+                        ctx.setdefault("target_claims", {}),
                     )
                     # BLE feedback should follow the selected device toward its nearest open target.
                     final_states = {
@@ -983,6 +1036,7 @@ class GameEngine:
                 colors = self._color_agnostic_colors(
                     ctx.get("target_slots") or [],
                     self._current_points_from_color_state(colors),
+                    ctx.setdefault("target_claims", {}),
                 )
 
             self._tick_game(ctx, colors)
