@@ -170,23 +170,24 @@ kernel = np.ones((5, 5), np.uint8)
 # 照明や素材に合わせて調整する
 # =========================
 
-# 赤：背景誤検知を減らすため、SとVを上げる
-LOWER_RED_1 = np.array([0, 160, 80])
-UPPER_RED_1 = np.array([8, 255, 255])
-LOWER_RED_2 = np.array([172, 160, 80])
+# 赤：はっきりした赤だけ拾う。背景誤検知を減らすためかなり厳しめ
+LOWER_RED_1 = np.array([0, 190, 110])
+UPPER_RED_1 = np.array([7, 255, 255])
+LOWER_RED_2 = np.array([174, 190, 110])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-# 黄色：背景を拾いやすいので、S/Vを上げ、H範囲も少し狭める
-LOWER_YELLOW = np.array([22, 130, 120])
-UPPER_YELLOW = np.array([33, 255, 255])
+# 黄色：はっきりした黄色だけ拾う。肌色・床・照明を拾いにくくする
+LOWER_YELLOW = np.array([24, 170, 150])
+UPPER_YELLOW = np.array([32, 255, 255])
 
-# 青：検知できていないので、H範囲を広げ、S/V下限を下げる
-LOWER_BLUE = np.array([90, 90, 40])
-UPPER_BLUE = np.array([135, 255, 255])
+# 青：背景は拾っていないので、少しだけ検知しやすくする
+LOWER_BLUE = np.array([85, 60, 30])
+UPPER_BLUE = np.array([140, 255, 255])
 
-# 緑：検知できていないので、H範囲を広げ、S/V下限を下げる
-LOWER_GREEN = np.array([35, 40, 35])
-UPPER_GREEN = np.array([90, 255, 255])
+# 緑：濃い緑対象物向け
+# 背景を避けるためH範囲を少し絞るが、濃い緑は暗いのでV下限は低めにする
+LOWER_GREEN = np.array([45, 70, 25])
+UPPER_GREEN = np.array([85, 255, 180])
 
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
