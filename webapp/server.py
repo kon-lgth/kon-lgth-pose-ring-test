@@ -137,6 +137,7 @@ VS_SESSION = {
     "phase": "idle",
     "players": [],
     "player_colors": {},
+    "type": None,
     "turn_index": 0,
     "current_index": 0,
     "turns": [],
@@ -251,6 +252,8 @@ def _public_vs_state(extra=None):
         "phase": VS_SESSION.get("phase", "idle"),
         "players": players,
         "player_colors": VS_SESSION.get("player_colors", {}),
+        "type": VS_SESSION.get("type") or PREPARED_GAME.get("type"),
+        "team_mode": (VS_SESSION.get("type") or PREPARED_GAME.get("type")) == "team_battle",
         "turn_index": VS_SESSION.get("turn_index", 0),
         "current_index": VS_SESSION.get("current_index", 0),
         "poses_per_turn": VS_POSES_PER_TURN,
@@ -599,9 +602,10 @@ def on_start_game(data):
     data: {players, difficulty, poses_per_round, num_rounds}
     """
     data = data or {}
-    if PREPARED_GAME.get("type") == "versus":
+    if PREPARED_GAME.get("type") in {"versus", "team_battle"}:
         if not VS_SESSION.get("active") or VS_SESSION.get("phase") in {"idle"}:
             VS_SESSION.update({
+                "type": PREPARED_GAME.get("type", "versus"),
                 "players": PREPARED_GAME.get("players", ["Player 1", "Player 2"]),
                 "player_colors": PREPARED_GAME.get("player_colors", {}),
                 "turn_index": 0,
@@ -670,6 +674,7 @@ def on_reset():
         "phase": "idle",
         "players": [],
         "player_colors": {},
+        "type": None,
         "turn_index": 0,
         "current_index": 0,
         "turns": [],

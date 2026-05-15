@@ -528,6 +528,14 @@ function vsBgFor(name, fallback = '#1710c9') {
   return vsIsRed(name) ? '#c90000' : fallback;
 }
 
+function vsIsTeamMode(state = _vsState) {
+  return Boolean(state && state.team_mode);
+}
+
+function vsTextKey(baseKey, state = _vsState) {
+  return vsIsTeamMode(state) ? `${baseKey}Team` : baseKey;
+}
+
 function vsPills(doneCount) {
   return `<div class="vs-status-row">${Array.from({ length: 5 }, (_, i) => (
     `<div class="vs-status-pill ${i < doneCount ? 'done' : ''}">${i < doneCount ? 'OK!' : getPlayerText('vsPoseReady')}</div>`
@@ -619,7 +627,7 @@ function renderVsSetupCountdown() {
   screen.style.setProperty('--vs-bg', bg);
   const label = _vsCountdownMode === 'ready'
     ? 'GET READY'
-    : formatPlayerText('vsSetupPose', { player: creatorLabel, current: done + 1, total: _vsState.poses_per_turn });
+    : formatPlayerText(vsTextKey('vsSetupPose'), { player: creatorLabel, current: done + 1, total: _vsState.poses_per_turn });
   content.innerHTML = `
     ${vsTopBrand()}
     <div class="vs-count-disc">${Math.max(0, _vsCountdownValue)}</div>
@@ -699,7 +707,7 @@ function renderVsState(state) {
       content.innerHTML = `
         ${vsTopBrand()}
         <div class="vs-count-disc">${Math.max(0, _vsCountdownValue)}</div>
-        <div class="vs-sub">${formatPlayerText('vsSetupPose', { player: escapeHtml(creator), current: (state.current_index || 0) + 1, total: state.poses_per_turn })}</div>
+        <div class="vs-sub">${formatPlayerText(vsTextKey('vsSetupPose', state), { player: escapeHtml(creator), current: (state.current_index || 0) + 1, total: state.poses_per_turn })}</div>
         ${vsPills(state.current_index || 0)}
         ${vsCaptureModalHtml(_vsCaptureError)}
       `;
@@ -718,7 +726,7 @@ function renderVsState(state) {
     content.innerHTML = `
       ${vsTopBrand()}
       <div class="vs-title">${getPlayerText('vsSetupCompleteTitle')}</div>
-      <div class="vs-sub">${formatPlayerText('vsSetupCompleteText', { total: state.poses_per_turn })}</div>
+      <div class="vs-sub">${formatPlayerText(vsTextKey('vsSetupCompleteText', state), { total: state.poses_per_turn })}</div>
       ${vsPills(state.poses_per_turn)}
     `;
     return;
@@ -752,7 +760,7 @@ function renderVsState(state) {
     content.innerHTML = `
       ${vsTopBrand()}
       <div class="vs-title">${getPlayerText('vsTurnClearTitle')}</div>
-      <div class="vs-sub">${getPlayerText('vsTurnClearText')}</div>
+      <div class="vs-sub">${getPlayerText(vsTextKey('vsTurnClearText', state))}</div>
     `;
     sound.playRoundEnd();
     return;
@@ -1055,9 +1063,10 @@ function updateTurnBanner(currentPlayer, players = [], playerColors = {}, gameSt
   if (!shouldShow) return;
   banner.style.setProperty('--turn-color', getPlayerColor(currentPlayer, players, playerColors));
   if (labelEl) {
+    const teamMode = (_lobbySetup && _lobbySetup.type === 'team_battle') || vsIsTeamMode(_vsState);
     labelEl.textContent = document.body.classList.contains('vs-prep')
-      ? getPlayerText('startingPlayer')
-      : 'CURRENT PLAYER';
+      ? getPlayerText(teamMode ? 'startingTeam' : 'startingPlayer')
+      : getPlayerText(teamMode ? 'currentTeam' : 'currentPlayer');
   }
   nameEl.textContent = currentPlayer;
 }
@@ -1281,7 +1290,7 @@ function applyState(state) {
     gs === 'IDLE' &&
     _lobbySetup &&
     _lobbySetup.status === 'ready_for_operator' &&
-    _lobbySetup.type === 'versus'
+    (_lobbySetup.type === 'versus' || _lobbySetup.type === 'team_battle')
   );
   document.body.classList.toggle('vs-prep', isVsOperatorWait);
   const lobbyPlayers = (_lobbySetup && Array.isArray(_lobbySetup.players)) ? _lobbySetup.players : [];

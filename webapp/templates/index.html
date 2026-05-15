@@ -95,6 +95,7 @@
     }
 
     .welcome-stage.multiplayer-open .back-button,
+    .welcome-stage.battle-open .back-button,
     .welcome-stage.setup-open .back-button,
     .welcome-stage.janken-open .back-button {
       display: inline-block;
@@ -476,14 +477,19 @@
       display: none;
     }
 
-    .welcome-stage.multiplayer-open {
+    .welcome-stage.multiplayer-open,
+    .welcome-stage.battle-open {
       grid-template-rows: 1fr;
       padding-top: clamp(4.5rem, 7vh, 5.5rem);
     }
 
     .welcome-stage.multiplayer-open .title-lockup,
     .welcome-stage.multiplayer-open .players-art,
-    .welcome-stage.multiplayer-open .start-area {
+    .welcome-stage.multiplayer-open .start-area,
+    .welcome-stage.battle-open .title-lockup,
+    .welcome-stage.battle-open .players-art,
+    .welcome-stage.battle-open .start-area,
+    .welcome-stage.battle-open .multiplayer-stage {
       display: none;
     }
 
@@ -497,15 +503,18 @@
     .welcome-stage.setup-open .players-art,
     .welcome-stage.setup-open .start-area,
     .welcome-stage.setup-open .multiplayer-stage,
+    .welcome-stage.setup-open .battle-stage,
     .welcome-stage.janken-open .title-lockup,
     .welcome-stage.janken-open .players-art,
     .welcome-stage.janken-open .start-area,
     .welcome-stage.janken-open .multiplayer-stage,
+    .welcome-stage.janken-open .battle-stage,
     .welcome-stage.janken-open .staff-setup-stage {
       display: none;
     }
 
-    .multiplayer-stage {
+    .multiplayer-stage,
+    .battle-stage {
       display: none;
       position: relative;
       z-index: 2;
@@ -517,6 +526,10 @@
     }
 
     .welcome-stage.multiplayer-open .multiplayer-stage {
+      display: grid;
+    }
+
+    .welcome-stage.battle-open .battle-stage {
       display: grid;
     }
 
@@ -1006,6 +1019,12 @@
         gap: 1.2rem;
         padding-bottom: 1rem;
       }
+      .battle-stage {
+        width: min(640px, 86vw);
+        grid-template-columns: 1fr;
+        gap: 1.2rem;
+        padding-bottom: 1rem;
+      }
       .multiplayer-card-title {
         min-height: 64px;
         font-size: clamp(1.8rem, 9vw, 3rem);
@@ -1123,11 +1142,30 @@
           </div>
         </div>
       </a>
-      <a class="multiplayer-choice" href="/player?mode=multiplayer&type=versus" data-multiplayer-type="versus">
+      <a class="multiplayer-choice" href="/player?mode=multiplayer&type=battle" data-multiplayer-type="battle">
         <div class="multiplayer-card">
-          <div class="multiplayer-card-title" data-i18n="versusMode">たいせん</div>
+          <div class="multiplayer-card-title" data-i18n="battleMode">バトル</div>
           <div class="multiplayer-card-art">
             <img src="/assets/multiplayer/vs.png" alt="Versus mode"/>
+          </div>
+        </div>
+      </a>
+    </section>
+
+    <section class="battle-stage" id="battleStage" aria-live="polite">
+      <a class="multiplayer-choice battle-choice" href="/player?mode=multiplayer&type=versus" data-multiplayer-type="versus">
+        <div class="multiplayer-card">
+          <div class="multiplayer-card-title" data-i18n="oneVsOneMode">1 VS 1</div>
+          <div class="multiplayer-card-art">
+            <img src="/assets/multiplayer/vs.png" alt="1 vs 1 battle mode"/>
+          </div>
+        </div>
+      </a>
+      <a class="multiplayer-choice battle-choice" href="/player?mode=multiplayer&type=team_battle" data-multiplayer-type="team_battle">
+        <div class="multiplayer-card">
+          <div class="multiplayer-card-title" data-i18n="teamBattleMode">チームバトル</div>
+          <div class="multiplayer-card-art">
+            <img src="/assets/multiplayer/team-battle.png" alt="Team battle mode"/>
           </div>
         </div>
       </a>
@@ -1192,13 +1230,19 @@
         sfxLabel: 'SFX',
         cooperativeMode: 'Co-op',
         versusMode: 'VS',
+        battleMode: 'Battle Mode',
+        oneVsOneMode: '1 VS 1',
+        teamBattleMode: 'Team Battle',
         staffSetupTitle: 'Device Check',
         staffSetupHint: 'Confirm both players are wearing the devices correctly and visible to the camera.',
+        teamStaffSetupHint: 'Confirm both teams are wearing the devices correctly and visible to the camera.',
         singleStaffSetupHint: 'Confirm the player is wearing the device correctly and visible to the camera.',
         frontCameraLabel: 'Front Camera',
         playerNameLabel: 'Name',
         player1Label: 'Player 1',
         player2Label: 'Player 2',
+        team1Label: 'Team 1',
+        team2Label: 'Team 2',
         preferredColor: 'Color',
         confirmReady: 'OK',
         jankenMain: 'Use Jan Ken Po to decide who goes first.',
@@ -1219,13 +1263,19 @@
         sfxLabel: '効果音',
         cooperativeMode: 'きょうりょく',
         versusMode: 'たいせん',
+        battleMode: 'バトル',
+        oneVsOneMode: '1 VS 1',
+        teamBattleMode: 'チームバトル',
         staffSetupTitle: 'デバイスチェック',
         staffSetupHint: 'ふたりのデバイスが正しく装着され、カメラで見えていることを確認してください。',
+        teamStaffSetupHint: '両チームのデバイスが正しく装着され、カメラで見えていることを確認してください。',
         singleStaffSetupHint: 'デバイスが正しく装着され、カメラで見えていることを確認してください。',
         frontCameraLabel: '正面カメラ',
         playerNameLabel: 'なまえ',
         player1Label: 'プレイヤー1',
         player2Label: 'プレイヤー2',
+        team1Label: 'チーム1',
+        team2Label: 'チーム2',
         preferredColor: '色',
         confirmReady: 'OK!',
         jankenMain: 'じゃんけんで先攻・後攻をきめよう！',
@@ -1449,8 +1499,19 @@
       closeLanguageMenu();
       closeVolumeMenu();
       const stage = document.getElementById('welcomeStage');
-      stage.classList.remove('setup-open', 'janken-open');
+      stage.classList.remove('setup-open', 'janken-open', 'battle-open');
       stage.classList.add('multiplayer-open');
+    }
+
+    function revealBattleModes(event) {
+      event.preventDefault();
+      welcomeAudio.click();
+      closeLanguageMenu();
+      closeVolumeMenu();
+      selectedGameMode = 'multiplayer';
+      const stage = document.getElementById('welcomeStage');
+      stage.classList.remove('multiplayer-open', 'setup-open', 'janken-open');
+      stage.classList.add('battle-open');
     }
 
     function showStaffSetup(event) {
@@ -1460,7 +1521,7 @@
       selectedMultiplayerType = event.currentTarget.dataset.multiplayerType || 'coop';
       configureSetupForMode('multiplayer');
       const stage = document.getElementById('welcomeStage');
-      stage.classList.remove('multiplayer-open', 'janken-open');
+      stage.classList.remove('multiplayer-open', 'battle-open', 'janken-open');
       stage.classList.add('setup-open');
     }
 
@@ -1472,8 +1533,12 @@
       selectedGameMode = 'single';
       configureSetupForMode('single');
       const stage = document.getElementById('welcomeStage');
-      stage.classList.remove('multiplayer-open', 'janken-open');
+      stage.classList.remove('multiplayer-open', 'battle-open', 'janken-open');
       stage.classList.add('setup-open');
+    }
+
+    function isTeamBattle() {
+      return selectedGameMode === 'multiplayer' && selectedMultiplayerType === 'team_battle';
     }
 
     function configureSetupForMode(mode) {
@@ -1482,16 +1547,30 @@
       const player1Label = document.querySelector('label.player-field:first-child');
       const player2Label = document.getElementById('setupPlayer2Field');
       const player1Text = document.querySelector('label.player-field:first-child .player-color-chip');
+      const player2Text = document.querySelector('#setupPlayer2Field .player-color-chip');
+      const player1Input = document.getElementById('setupPlayer1');
+      const player2Input = document.getElementById('setupPlayer2');
       const hint = document.querySelector('.setup-hint');
       const colorChoice = document.getElementById('singleColorChoice');
+      const teamBattle = isTeamBattle();
       setupStage.classList.toggle('single-setup', mode === 'single');
       assignment.classList.toggle('single-player', mode === 'single');
       if (player1Label) player1Label.hidden = false;
       if (player2Label) player2Label.hidden = mode === 'single';
       if (colorChoice) colorChoice.hidden = mode !== 'single';
-      setI18nKey(player1Text, mode === 'single' ? 'playerNameLabel' : 'player1Label');
-      setI18nKey(hint, mode === 'single' ? 'singleStaffSetupHint' : 'staffSetupHint');
+      setI18nKey(player1Text, mode === 'single' ? 'playerNameLabel' : (teamBattle ? 'team1Label' : 'player1Label'));
+      setI18nKey(player2Text, teamBattle ? 'team2Label' : 'player2Label');
+      setI18nKey(hint, mode === 'single' ? 'singleStaffSetupHint' : (teamBattle ? 'teamStaffSetupHint' : 'staffSetupHint'));
       if (player1Text) player1Text.style.setProperty('--player-color', mode === 'single' ? selectedSingleColor : '#2563eb');
+      if (mode === 'single') {
+        if (player1Input && (player1Input.value === 'Player 1' || player1Input.value === 'Team 1')) player1Input.value = 'Player 1';
+      } else if (teamBattle) {
+        if (player1Input && (player1Input.value === 'Player 1' || player1Input.value === '')) player1Input.value = 'Team 1';
+        if (player2Input && (player2Input.value === 'Player 2' || player2Input.value === '')) player2Input.value = 'Team 2';
+      } else {
+        if (player1Input && (player1Input.value === 'Team 1' || player1Input.value === '')) player1Input.value = 'Player 1';
+        if (player2Input && (player2Input.value === 'Team 2' || player2Input.value === '')) player2Input.value = 'Player 2';
+      }
     }
 
     function backFromCurrentScreen() {
@@ -1508,9 +1587,16 @@
       }
       if (stage.classList.contains('setup-open')) {
         stage.classList.remove('setup-open');
-        if (selectedGameMode === 'multiplayer') {
+        if (selectedGameMode === 'multiplayer' && (selectedMultiplayerType === 'versus' || selectedMultiplayerType === 'team_battle')) {
+          stage.classList.add('battle-open');
+        } else if (selectedGameMode === 'multiplayer') {
           stage.classList.add('multiplayer-open');
         }
+        return;
+      }
+      if (stage.classList.contains('battle-open')) {
+        stage.classList.remove('battle-open');
+        stage.classList.add('multiplayer-open');
         return;
       }
       if (stage.classList.contains('multiplayer-open')) {
@@ -1519,8 +1605,10 @@
     }
 
     function getAssignedPlayers() {
-      const p1 = document.getElementById('setupPlayer1').value.trim() || 'Player 1';
-      const p2 = document.getElementById('setupPlayer2').value.trim() || 'Player 2';
+      const p1Default = isTeamBattle() ? 'Team 1' : 'Player 1';
+      const p2Default = isTeamBattle() ? 'Team 2' : 'Player 2';
+      const p1 = document.getElementById('setupPlayer1').value.trim() || p1Default;
+      const p2 = document.getElementById('setupPlayer2').value.trim() || p2Default;
       return [p1, p2];
     }
 
@@ -1681,7 +1769,11 @@
     document.querySelector('[data-mode="single"]').addEventListener('click', showSinglePlayerSetup);
     document.querySelector('[data-mode="multiplayer"]').addEventListener('click', revealMultiplayerModes);
     document.querySelectorAll('.multiplayer-choice').forEach((el) => {
-      el.addEventListener('click', showStaffSetup);
+      if (el.dataset.multiplayerType === 'battle') {
+        el.addEventListener('click', revealBattleModes);
+      } else {
+        el.addEventListener('click', showStaffSetup);
+      }
     });
     document.querySelectorAll('.color-option').forEach((button) => {
       button.addEventListener('click', () => {
