@@ -161,7 +161,7 @@ FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 3.0
 LOST_HOLD_SEC = 0.7
 
 # 色領域の最小面積
-MIN_AREA = 40
+MIN_AREA = 10
 
 kernel = np.ones((5, 5), np.uint8)
 
@@ -170,25 +170,23 @@ kernel = np.ones((5, 5), np.uint8)
 # 照明や素材に合わせて調整する
 # =========================
 
-# 赤：はっきりした赤だけ拾う。背景誤検知を減らすためかなり厳しめ
-LOWER_RED_1 = np.array([0, 190, 110])
-UPPER_RED_1 = np.array([7, 255, 255])
-LOWER_RED_2 = np.array([174, 190, 110])
+# 赤：少し緩める。暗め・薄めの赤も拾いやすくする
+LOWER_RED_1 = np.array([0, 160, 80])
+UPPER_RED_1 = np.array([10, 255, 255])
+LOWER_RED_2 = np.array([170, 160, 80])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-# 黄色：はっきりした黄色だけ拾う。肌色・床・照明を拾いにくくする
-LOWER_YELLOW = np.array([20, 90, 80])
-UPPER_YELLOW = np.array([38, 255, 255])
+# 黄色：少し緩める。現在より暗い黄色・薄い黄色も拾う
+LOWER_YELLOW = np.array([16, 55, 45])
+UPPER_YELLOW = np.array([42, 255, 255])
 
-# 青：背景は拾っていないので、少しだけ検知しやすくする
-LOWER_BLUE = np.array([110, 140, 60])
+# 青：少し緩める。影だけ拾う場合はV下限を下げすぎない
+LOWER_BLUE = np.array([90, 55, 45])
 UPPER_BLUE = np.array([130, 255, 255])
 
-# 緑：濃い緑対象物向け
-# 背景を避けるためH範囲を少し絞るが、濃い緑は暗いのでV下限は低めにする
-LOWER_GREEN = np.array([45, 70, 25])
-UPPER_GREEN = np.array([85, 255, 180])
-
+# 緑：少し緩める。濃い緑・暗い緑を拾いやすくする
+LOWER_GREEN = np.array([32, 30, 15])
+UPPER_GREEN = np.array([100, 255, 240])
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 COLOR_CONFIGS = {
