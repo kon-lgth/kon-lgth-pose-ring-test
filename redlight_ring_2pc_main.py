@@ -177,12 +177,12 @@ LOWER_RED_2 = np.array([174, 190, 110])
 UPPER_RED_2 = np.array([179, 255, 255])
 
 # 黄色：はっきりした黄色だけ拾う。肌色・床・照明を拾いにくくする
-LOWER_YELLOW = np.array([24, 170, 150])
-UPPER_YELLOW = np.array([32, 255, 255])
+LOWER_YELLOW = np.array([20, 90, 80])
+UPPER_YELLOW = np.array([38, 255, 255])
 
 # 青：背景は拾っていないので、少しだけ検知しやすくする
-LOWER_BLUE = np.array([85, 60, 30])
-UPPER_BLUE = np.array([140, 255, 255])
+LOWER_BLUE = np.array([110, 140, 60])
+UPPER_BLUE = np.array([130, 255, 255])
 
 # 緑：濃い緑対象物向け
 # 背景を避けるためH範囲を少し絞るが、濃い緑は暗いのでV下限は低めにする

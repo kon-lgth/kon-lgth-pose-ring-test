@@ -839,6 +839,240 @@ class GameEngine:
             }
         return colors
 
+    def _make_multi_ble_feedbacks(self, core):
+        """Create one BLE feedback controller per PoseRing color.
+
+        This is the safe first integration step: connect to 4 rings, send OFF at
+        startup/shutdown, and publish connection status. It intentionally does
+        not change game judging or distance feedback yet.
+        """
+        char_uuid = self._settings.get("ble_char_uuid", core.BLE_LED_CHAR_UUID)
+        device_names = {
+            "RED": os.getenv("POSERING_BLE_RED", self._settings.get("ble_red_device_name", "PoseRing_RED")),
+            "YELLOW": os.getenv("POSERING_BLE_YELLOW", self._settings.get("ble_yellow_device_name", "PoseRing_YELLOW")),
+            "BLUE": os.getenv("POSERING_BLE_BLUE", self._settings.get("ble_blue_device_name", "PoseRing_BLUE")),
+            "GREEN": os.getenv("POSERING_BLE_GREEN", self._settings.get("ble_green_device_name", "PoseRing_GREEN")),
+        }
+
+        feedbacks = {}
+        for color, device_name in device_names.items():
+            controller = core.BleFeedbackController(device_name, char_uuid)
+            controller.start()
+            controller.set_state(core.BleFeedbackController.STATE_OFF)
+            feedbacks[color] = controller
+        return feedbacks
+
+    def _is_live_marker_source(self, source):
+        return source in ["A_LIVE", "B_LIVE", "SIM"]
+
+    def _update_multi_ble_status_connect_only(self, core, feedbacks):
+        if not feedbacks:
+            with self._lock:
+                self._ble_status = {"enabled": False, "mode": "multi_connect_only"}
+            return
+
+        rings = {}
+        for color, controller in feedbacks.items():
+            rings[color] = {
+                "device": controller.device_name,
+                "connected": bool(controller.is_connected),
+                "value": int(core.BleFeedbackController.STATE_OFF),
+            }
+
+        with self._lock:
+            self._ble_status = {
+                "enabled": True,
+                "mode": "multi_connect_only",
+                "connected": any(r["connected"] for r in rings.values()),
+                "rings": rings,
+            }
+
+    def _update_multi_ble_visible_white(self, core, feedbacks, final_states):
+        """Stage 3-B: visible marker -> white, missing marker -> off.
+
+        This intentionally does not use distance or target assignment yet, so it
+        should not affect the camera/game judging path. It only looks at whether
+        each color was detected live by A/B cameras, and sends 1 or 0 to that
+        color's bracelet.
+        """
+        if not feedbacks:
+            with self._lock:
+                self._ble_status = {"enabled": False, "mode": "multi_visible_white"}
+            return
+
+        rings = {}
+        for color, controller in feedbacks.items():
+            fs = (final_states or {}).get(color, {})
+            visible = bool(fs.get("current") is not None and self._is_live_marker_source(fs.get("source")))
+            value = (
+                core.BleFeedbackController.STATE_CONNECTED_WHITE
+                if visible
+                else core.BleFeedbackController.STATE_OFF
+            )
+            try:
+                controller.set_state(value)
+            except Exception:
+                pass
+            rings[color] = {
+                "device": controller.device_name,
+                "connected": bool(controller.is_connected),
+                "visible": visible,
+                "source": fs.get("source", "NO DATA"),
+                "value": int(value),
+            }
+
+        with self._lock:
+            self._ble_status = {
+                "enabled": True,
+                "mode": "multi_visible_white",
+                "connected": any(r["connected"] for r in rings.values()),
+                "rings": rings,
+            }
+
+    def _update_multi_ble_distance_feedback(self, core, ctx, feedbacks, final_states):
+        """Stage 3-C/4: send BLE feedback to each color's own ring.
+
+        Game judging remains color-agnostic. This function only chooses the BLE
+        value for each physical color ring:
+          - not visible: 0
+          - visible but not playing / no target: 1
+          - playing and has nearest target distance: 2..249
+          - inside goal: 250
+          - POSE_CLEAR: RED gets 251 once, then connected rings get 252
+
+        It deliberately avoids doing any new geometry calculation here; it uses
+        the already computed final_states/colors data so the live camera path is
+        less likely to be affected.
+        """
+        if not feedbacks:
+            with self._lock:
+                self._ble_status = {"enabled": False, "mode": "multi_distance_feedback"}
+            return
+
+        # Stage 4: clear feedback.
+        # RED receives 251 once for the sound. Connected rings then receive 252
+        # so each Arduino keeps its own color at maximum after clear.
+        clear_now = bool(ctx.get("game_state") == GameState.POSE_CLEAR and ctx.get("pose_result") == "cleared")
+        if clear_now:
+            clear_key = (ctx.get("round"), ctx.get("pose"), ctx.get("poses_cleared_total"))
+            if ctx.get("multi_ble_clear_key") != clear_key:
+                ctx["multi_ble_clear_key"] = clear_key
+                ctx["multi_ble_clear_sound_sent"] = False
+
+            rings = {}
+            for color, controller in feedbacks.items():
+                if color == "RED" and not ctx.get("multi_ble_clear_sound_sent", False):
+                    value = 251
+                    reason = "clear_sound_red_only"
+                    ctx["multi_ble_clear_sound_sent"] = True
+                else:
+                    value = 252
+                    reason = "clear_latch_max_color"
+
+                try:
+                    controller.set_state(value)
+                except Exception:
+                    pass
+
+                rings[color] = {
+                    "device": controller.device_name,
+                    "connected": bool(controller.is_connected),
+                    "visible": bool(((final_states or {}).get(color, {}) or {}).get("current") is not None),
+                    "source": ((final_states or {}).get(color, {}) or {}).get("source", "NO DATA"),
+                    "distance": None,
+                    "inside": True,
+                    "value": int(value),
+                    "reason": reason,
+                }
+
+            with self._lock:
+                self._ble_status = {
+                    "enabled": True,
+                    "mode": "multi_distance_feedback",
+                    "connected": any(r["connected"] for r in rings.values()),
+                    "playing": False,
+                    "clear": True,
+                    "rings": rings,
+                }
+            return
+        else:
+            # Allow the next cleared pose to fire the RED sound again.
+            if ctx.get("game_state") not in (GameState.POSE_CLEAR,):
+                ctx["multi_ble_clear_key"] = None
+                ctx["multi_ble_clear_sound_sent"] = False
+
+        playing = bool(ctx.get("game_state") == GameState.PLAYING and ctx.get("targets_set", False))
+        rings = {}
+
+        for color, controller in feedbacks.items():
+            fs = (final_states or {}).get(color, {})
+            visible = bool(fs.get("current") is not None and self._is_live_marker_source(fs.get("source")))
+            distance = fs.get("distance")
+            inside = bool(fs.get("inside", False))
+
+            if not visible:
+                value = core.BleFeedbackController.STATE_OFF
+                reason = "not_visible"
+            elif not playing:
+                value = core.BleFeedbackController.STATE_CONNECTED_WHITE
+                reason = "visible_not_playing"
+            elif distance is None:
+                value = core.BleFeedbackController.STATE_CONNECTED_WHITE
+                reason = "visible_no_distance"
+            elif inside:
+                value = 250
+                reason = "inside_goal"
+            else:
+                brightness = core.distance_to_red_brightness(distance)
+                if brightness is None:
+                    value = core.BleFeedbackController.STATE_CONNECTED_WHITE
+                    reason = "too_far"
+                else:
+                    # Keep 250 reserved for goal/inside. Arduino treats >=250 as goal.
+                    value = max(core.BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE, min(249, int(brightness)))
+                    reason = "distance_feedback"
+
+            try:
+                controller.set_state(value)
+            except Exception:
+                pass
+
+            rings[color] = {
+                "device": controller.device_name,
+                "connected": bool(controller.is_connected),
+                "visible": visible,
+                "source": fs.get("source", "NO DATA"),
+                "distance": None if distance is None else float(distance),
+                "inside": inside,
+                "value": int(value),
+                "reason": reason,
+            }
+
+        with self._lock:
+            self._ble_status = {
+                "enabled": True,
+                "mode": "multi_distance_feedback",
+                "connected": any(r["connected"] for r in rings.values()),
+                "playing": playing,
+                "clear": False,
+                "rings": rings,
+            }
+
+    def _stop_multi_ble_feedbacks(self, core, feedbacks):
+        if not feedbacks:
+            return
+        for controller in feedbacks.values():
+            try:
+                controller.set_state(core.BleFeedbackController.STATE_OFF)
+            except Exception:
+                pass
+        time.sleep(0.2)
+        for controller in feedbacks.values():
+            try:
+                controller.stop()
+            except Exception:
+                pass
+
     def _update_ble(self, core, ctx, final_states, ble_feedback, last_target_live_time):
         if ble_feedback is None:
             self._ble_status = {"enabled": False}
@@ -927,12 +1161,18 @@ class GameEngine:
                 )
 
         ble_feedback = None
+        multi_ble_feedbacks = None
         if bool(self._settings.get("ble_enabled", core.ENABLE_XIAO_BLE)):
-            ble_feedback = core.BleFeedbackController(
-                self._settings.get("ble_device_name", core.BLE_DEVICE_NAME),
-                self._settings.get("ble_char_uuid", core.BLE_LED_CHAR_UUID),
-            )
-            ble_feedback.start()
+            ble_mode = os.getenv("POSERING_BLE_MODE", self._settings.get("ble_mode", "single")).strip().lower()
+            if ble_mode in ["multi", "multi_connect", "multi_connect_only", "multi_visible", "multi_visible_white", "multi_stage_white", "multi_distance", "multi_distance_feedback"]:
+                multi_ble_feedbacks = self._make_multi_ble_feedbacks(core)
+                self._update_multi_ble_status_connect_only(core, multi_ble_feedbacks)
+            else:
+                ble_feedback = core.BleFeedbackController(
+                    self._settings.get("ble_device_name", core.BLE_DEVICE_NAME),
+                    self._settings.get("ble_char_uuid", core.BLE_LED_CHAR_UUID),
+                )
+                ble_feedback.start()
 
         ctx = self._make_context()
         last_used = {color: None for color in COLOR_ORDER}
@@ -973,9 +1213,17 @@ class GameEngine:
                     colors = self._colors_from_final(final_states)
                 self._update_current_pose_cache(set_a, set_b)
                 self._tick_game(ctx, colors)
-                last_target_live_time = self._update_ble(
-                    core, ctx, final_states, ble_feedback, last_target_live_time
-                )
+                if multi_ble_feedbacks is not None:
+                    if ble_mode in ["multi_distance", "multi_distance_feedback"]:
+                        self._update_multi_ble_distance_feedback(core, ctx, multi_ble_feedbacks, final_states)
+                    elif ble_mode in ["multi_visible", "multi_visible_white", "multi_stage_white"]:
+                        self._update_multi_ble_visible_white(core, multi_ble_feedbacks, final_states)
+                    else:
+                        self._update_multi_ble_status_connect_only(core, multi_ble_feedbacks)
+                else:
+                    last_target_live_time = self._update_ble(
+                        core, ctx, final_states, ble_feedback, last_target_live_time
+                    )
 
                 with self._frame_lock:
                     self._jpeg[0] = _encode_jpeg(_camera_frame(set_a.out0, f"A CAM {set_a.cam0_index}"))
@@ -995,6 +1243,8 @@ class GameEngine:
                 time.sleep(0.01)
 
         finally:
+            if multi_ble_feedbacks is not None:
+                self._stop_multi_ble_feedbacks(core, multi_ble_feedbacks)
             if ble_feedback is not None:
                 ble_feedback.set_state(core.BleFeedbackController.STATE_OFF)
                 time.sleep(0.2)
