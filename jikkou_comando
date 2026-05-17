@@ -1,0 +1,13 @@
+実行コマンド
+
+cd C:\PoseRingTest
+Remove-Item Env:POSERING_SIMULATION -ErrorAction SilentlyContinue
+Remove-Item Env:POSERING_ENABLE_BLE -ErrorAction SilentlyContinue
+
+$env:POSERING_A_BACKEND="DSHOW"
+$env:POSERING_A_CAM0="0"
+$env:POSERING_A_CAM1="1"
+
+$env:POSERING_BLE_MODE="multi_distance_feedback"
+
+& "C:\Users\watar\AppData\Local\Programs\Python\Python313\python.exe" "C:\PoseRingTest\webapp\server.py"
