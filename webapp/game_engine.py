@@ -322,19 +322,19 @@ class GameEngine:
         for color in COLOR_ORDER:
             if set_a is not None:
                 st = set_a.states[color]
-                point = st.get("live_point") if st.get("live") else st.get("current_point")
+                point = self._valid_point(st.get("live_point") if st.get("live") else st.get("current_point"))
                 if point is not None:
                     current[color]["A"] = {
-                        "point": np.array(point, dtype=np.float64),
+                        "point": point,
                         "source": "A_LIVE" if st.get("live") else "LAST_USED",
                         "y_diff": st.get("y_diff"),
                     }
             if set_b is not None:
                 st = set_b.states[color]
-                point = st.get("live_point") if st.get("live") else st.get("current_point")
+                point = self._valid_point(st.get("live_point") if st.get("live") else st.get("current_point"))
                 if point is not None:
                     current[color]["B"] = {
-                        "point": np.array(point, dtype=np.float64),
+                        "point": point,
                         "source": "B_LIVE" if st.get("live") else "LAST_USED",
                         "y_diff": st.get("y_diff"),
                     }
@@ -343,14 +343,86 @@ class GameEngine:
     def _current_points_from_color_state(self, colors):
         current = {color: {} for color in COLOR_ORDER}
         for color in COLOR_ORDER:
-            point = (colors or {}).get(color, {}).get("current")
+            point = self._valid_point((colors or {}).get(color, {}).get("current"))
             if point is not None:
                 current[color]["SIM"] = {
-                    "point": np.array(point, dtype=np.float64),
+                    "point": point,
                     "source": "SIM",
                     "y_diff": (colors or {}).get(color, {}).get("y_diff"),
                 }
         return current
+
+
+    def _valid_point(self, point):
+        """Return a float64 3D vector, or None if point has invalid/partial data."""
+        if point is None:
+            return None
+        try:
+            arr = np.array(point, dtype=np.float64).reshape(-1)
+        except (TypeError, ValueError):
+            return None
+        if arr.size < 3:
+            return None
+        arr = arr[:3]
+        if not np.all(np.isfinite(arr)):
+            return None
+        return arr
+
+    def _nearest_target_ble_states(self, core, target_slots, current_by_color, raw_final_states=None):
+        """Independent BLE feedback target selection.
+
+        Game clear judging stays color-agnostic and uses _color_agnostic_colors().
+        BLE feedback should not depend on that target assignment, because one
+        ring may be temporarily unassigned while still approaching a target.
+        For each physical color, choose the nearest valid target slot among all
+        goals and return distance/inside info for that ring.
+        """
+        states = {}
+        max_distance = max(self._clear_dist * 3.0, 1.0)
+
+        for color in COLOR_ORDER:
+            nearest = None
+            nearest_index = None
+            color_current = (current_by_color or {}).get(color, {})
+
+            for target_index, slot in enumerate(target_slots or []):
+                detail = self._target_distance_for_color(color_current, slot)
+                if detail is None:
+                    continue
+                if nearest is None or detail["distance"] < nearest["distance"]:
+                    nearest = detail
+                    nearest_index = target_index
+
+            if nearest is not None:
+                distance = nearest["distance"]
+                inside = bool(distance <= self._clear_dist)
+                proximity = max(0.0, min(1.0, 1.0 - distance / max_distance))
+                states[color] = {
+                    "used_set": nearest.get("used_set", "-"),
+                    "source": nearest.get("source", "NO DATA"),
+                    "current": nearest.get("current"),
+                    "target": nearest.get("target"),
+                    "distance": distance,
+                    "inside": inside,
+                    "y_diff": nearest.get("y_diff"),
+                    "proximity": proximity,
+                    "target_index": None if nearest_index is None else nearest_index + 1,
+                }
+            else:
+                raw = ((raw_final_states or {}).get(color) or {})
+                states[color] = {
+                    "used_set": raw.get("used_set", "-"),
+                    "source": raw.get("source", "NO DATA"),
+                    "current": raw.get("current"),
+                    "target": None,
+                    "distance": None,
+                    "inside": False,
+                    "y_diff": raw.get("y_diff"),
+                    "proximity": 0.0,
+                    "target_index": None,
+                }
+
+        return states
 
     def _target_distance_for_color(self, color_current, slot):
         best = None
@@ -358,14 +430,18 @@ class GameEngine:
             cur = color_current.get(set_name)
             if not cur:
                 continue
-            distance = float(np.linalg.norm(cur["point"] - target))
+            cur_point = self._valid_point(cur.get("point"))
+            target_point = self._valid_point(target)
+            if cur_point is None or target_point is None:
+                continue
+            distance = float(np.linalg.norm(cur_point - target_point))
             if best is None or distance < best["distance"]:
                 best = {
                     "distance": distance,
                     "used_set": set_name,
-                    "source": cur["source"],
-                    "current": cur["point"],
-                    "target": target,
+                    "source": cur.get("source", "NO DATA"),
+                    "current": cur_point,
+                    "target": target_point,
                     "y_diff": cur.get("y_diff"),
                 }
         return best
@@ -1186,43 +1262,44 @@ class GameEngine:
 
                 self._process_commands(self._pop_commands(), ctx, set_a, set_b)
 
-                final_states = {}
+                raw_final_states = {}
                 for color in COLOR_ORDER:
-                    final_states[color] = core.select_and_judge_color(color, set_a, set_b, last_used)
+                    raw_final_states[color] = core.select_and_judge_color(color, set_a, set_b, last_used)
+
+                current_by_color = self._current_points_from_sets(set_a, set_b)
+                ble_states = raw_final_states
 
                 if ctx.get("target_slots"):
+                    target_slots = ctx.get("target_slots") or []
                     colors = self._color_agnostic_colors(
-                        ctx.get("target_slots") or [],
-                        self._current_points_from_sets(set_a, set_b),
+                        target_slots,
+                        current_by_color,
                         ctx.setdefault("target_claims", {}),
                     )
-                    # BLE feedback should follow the selected device toward its nearest open target.
-                    final_states = {
-                        color: {
-                            "used_set": colors[color].get("used_set", "-"),
-                            "source": colors[color].get("source", "NO DATA"),
-                            "current": np.array(colors[color]["current"], dtype=np.float64) if colors[color].get("current") is not None else None,
-                            "target": np.array(colors[color]["target"], dtype=np.float64) if colors[color].get("target") is not None else None,
-                            "distance": colors[color].get("distance"),
-                            "inside": colors[color].get("inside", False),
-                            "y_diff": colors[color].get("y_diff"),
-                        }
-                        for color in COLOR_ORDER
-                    }
+                    # BLE feedback is intentionally independent from color-agnostic
+                    # target assignment. Each physical ring should react to its own
+                    # nearest goal, even if that goal is currently claimed by another
+                    # color for game-clear judging.
+                    ble_states = self._nearest_target_ble_states(
+                        core,
+                        target_slots,
+                        current_by_color,
+                        raw_final_states,
+                    )
                 else:
-                    colors = self._colors_from_final(final_states)
+                    colors = self._colors_from_final(raw_final_states)
                 self._update_current_pose_cache(set_a, set_b)
                 self._tick_game(ctx, colors)
                 if multi_ble_feedbacks is not None:
                     if ble_mode in ["multi_distance", "multi_distance_feedback"]:
-                        self._update_multi_ble_distance_feedback(core, ctx, multi_ble_feedbacks, final_states)
+                        self._update_multi_ble_distance_feedback(core, ctx, multi_ble_feedbacks, ble_states)
                     elif ble_mode in ["multi_visible", "multi_visible_white", "multi_stage_white"]:
-                        self._update_multi_ble_visible_white(core, multi_ble_feedbacks, final_states)
+                        self._update_multi_ble_visible_white(core, multi_ble_feedbacks, raw_final_states)
                     else:
                         self._update_multi_ble_status_connect_only(core, multi_ble_feedbacks)
                 else:
                     last_target_live_time = self._update_ble(
-                        core, ctx, final_states, ble_feedback, last_target_live_time
+                        core, ctx, raw_final_states, ble_feedback, last_target_live_time
                     )
 
                 with self._frame_lock:

@@ -185,8 +185,8 @@ LOWER_BLUE = np.array([90, 55, 45])
 UPPER_BLUE = np.array([130, 255, 255])
 
 # 緑：少し緩める。濃い緑・暗い緑を拾いやすくする
-LOWER_GREEN = np.array([32, 30, 15])
-UPPER_GREEN = np.array([100, 255, 240])
+LOWER_GREEN = np.array([30, 25, 10])
+UPPER_GREEN = np.array([105, 255, 245])
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 COLOR_CONFIGS = {
