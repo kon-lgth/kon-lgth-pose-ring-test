@@ -20,6 +20,9 @@
 ═══════════════════════════════════════════ */
 
 const COLOR_ORDER = ['RED', 'YELLOW', 'BLUE', 'GREEN'];
+const PLAYER_QUERY = new URLSearchParams(window.location.search);
+const PLAYER_SCREEN_MODE = PLAYER_QUERY.get('mode') || 'player';
+document.body.classList.toggle('single-player-mode', PLAYER_SCREEN_MODE === 'single');
 
 // Base frequencies (pentatonic scale — sounds pleasant together)
 const COLOR_FREQ = { RED: 392, YELLOW: 523, BLUE: 659, GREEN: 784 };
@@ -270,6 +273,48 @@ class SoundSystem {
     }
   }
 
+  playUiClick() {
+    if (!this.audioReady || !this.effectsEnabled) return;
+    this._ensureCtx();
+    if (!this.enabled) return;
+    const play = (freq, when, duration, volume) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      this._connectEffect(gain);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, when);
+      gain.gain.setValueAtTime(0.0001, when);
+      gain.gain.exponentialRampToValueAtTime(volume, when + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+      osc.start(when);
+      osc.stop(when + duration + 0.04);
+    };
+    const t = this.ctx.currentTime + 0.01;
+    play(740, t, 0.06, 0.034);
+    play(988, t + 0.055, 0.08, 0.028);
+  }
+
+  playModalOpen() {
+    if (!this.audioReady || !this.effectsEnabled) return;
+    this._ensureCtx();
+    if (!this.enabled) return;
+    const t = this.ctx.currentTime;
+    [523, 784].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      this._connectEffect(gain);
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const start = t + i * 0.07;
+      gain.gain.setValueAtTime(0.11 - i * 0.03, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.12);
+      osc.start(start);
+      osc.stop(start + 0.13);
+    });
+  }
+
   /* ── Camera shutter click ── */
   playCameraShutter() {
     if (!this.audioReady || !this.effectsEnabled) return;
@@ -478,6 +523,7 @@ window.enablePlayerAudio = async () => {
   document.body.classList.toggle('audio-ready', ready);
   const btn = document.getElementById('soundBtn');
   if (btn) btn.textContent = ready ? getPlayerText('audioReady') : getPlayerText('audioButton');
+  if (ready) sound.playUiClick();
 };
 
 window.toggleSound = () => {
@@ -486,6 +532,7 @@ window.toggleSound = () => {
 
 window.openFinishModal = () => {
   document.getElementById('finishModal')?.classList.add('show');
+  sound.playModalOpen();
 };
 
 window.closeFinishModal = () => {
@@ -515,6 +562,7 @@ let _vsLastSetupCount = 0;
 let _vsChallengeReadyKey = '';
 let _vsSetupReadyShownKey = '';
 let _vsCaptureError = null;
+let _vsCaptureModalSoundKey = '';
 
 function vsColorFor(name, fallback = '#1710c9') {
   return (_vsState && _vsState.player_colors && _vsState.player_colors[name]) || fallback;
@@ -1165,7 +1213,10 @@ function showResultOverlay(result, snapshots) {
   if (result === 'cleared') {
     title.textContent = '⭐ POSE CLEAR! ⭐';
     title.style.color = '#facc15';
-    sub.textContent   = 'Strike a pose — you nailed it!';
+    const elapsed = Number(snapshots && snapshots.elapsed_time);
+    sub.textContent = Number.isFinite(elapsed) && elapsed > 0
+      ? `Clear time: ${elapsed.toFixed(1)} seconds`
+      : 'Strike a pose — you nailed it!';
   } else {
     title.textContent = "TIME'S UP!";
     title.style.color = '#a78bfa';
@@ -1185,8 +1236,23 @@ function showResultOverlay(result, snapshots) {
 
   // Build snapshot images
   row.innerHTML = '';
-  const labels = { cam0: '📷 CAM 0 — FRONT', cam1: '📷 CAM 1 — SIDE' };
-  ['cam0', 'cam1'].forEach(key => {
+  const labels = {
+    setup_photo: 'TARGET CAM 0',
+    setup_photo_cam1: 'TARGET CAM 1',
+    cam0: '📷 CAM 0 — FRONT',
+    cam1: '📷 CAM 1 — SIDE',
+  };
+  if (snapshots?.setup_photos?.cam0) snapshots.setup_photo = snapshots.setup_photos.cam0;
+  if (snapshots?.setup_photos?.cam1) snapshots.setup_photo_cam1 = snapshots.setup_photos.cam1;
+  const keys = snapshots && (snapshots.setup_photo || snapshots.setup_photo_cam1)
+    ? [
+        ...(snapshots.setup_photo ? ['setup_photo'] : []),
+        ...(snapshots.setup_photo_cam1 ? ['setup_photo_cam1'] : []),
+        'cam0',
+        'cam1',
+      ]
+    : ['cam0', 'cam1'];
+  keys.forEach(key => {
     const frame = document.createElement('div');
     frame.className = 'snapshot-frame';
     if (snapshots && snapshots[key]) {
@@ -1204,7 +1270,9 @@ function showResultOverlay(result, snapshots) {
     row.appendChild(frame);
   });
 
-  btn.textContent = result === 'cleared' ? '▶ NEXT POSE' : '▶ CONTINUE';
+  btn.textContent = PLAYER_SCREEN_MODE === 'single' && result === 'cleared'
+    ? '▶ PLAY AGAIN'
+    : (result === 'cleared' ? '▶ NEXT POSE' : '▶ CONTINUE');
   ov.classList.add('show');
 }
 
@@ -1318,8 +1386,16 @@ function applyState(state) {
   const tl  = Math.ceil(state.time_left || 0);
   const tel = document.getElementById('timerDisplay');
   if (tel) {
-    tel.textContent = (gs === 'GAME_OVER' || gs === 'GAME_CLEAR') ? '—' : String(tl).padStart(2, '0');
-    tel.className   = 'timer-val ' + (tl > 20 ? 'ok' : tl > 10 ? 'warning' : 'danger');
+    if (gs === 'GAME_OVER' || gs === 'GAME_CLEAR') {
+      tel.textContent = '—';
+      tel.className = 'timer-val ok';
+    } else if (state.no_time_limit) {
+      tel.textContent = '∞';
+      tel.className = 'timer-val ok';
+    } else {
+      tel.textContent = String(tl).padStart(2, '0');
+      tel.className = 'timer-val ' + (tl > 20 ? 'ok' : tl > 10 ? 'warning' : 'danger');
+    }
   }
 
   // ── Round / pose ──
@@ -1435,8 +1511,14 @@ socket.on('vs_state', state => {
       target_point_count: state.target_point_count || 0,
       required_target_points: state.required_target_points || 0,
     };
+    const key = JSON.stringify(_vsCaptureError);
+    if (key !== _vsCaptureModalSoundKey) {
+      _vsCaptureModalSoundKey = key;
+      sound.playModalOpen();
+    }
   } else if (state && state.capture_ok === true) {
     _vsCaptureError = null;
+    _vsCaptureModalSoundKey = '';
   }
   renderVsState(state);
 });
@@ -1449,4 +1531,10 @@ socket.on('snapshot_event', ev => {
     return;
   }
   showResultOverlay(ev.result, ev);
+});
+
+document.addEventListener('click', (event) => {
+  if (event.target.closest('button')) {
+    sound.playUiClick();
+  }
 });

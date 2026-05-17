@@ -54,18 +54,15 @@ def _env_int(name, default):
 # ---------------------------------------------------------------------------
 
 CONFIG = {
-    # Set to True to run without cameras (great for UI development)
-    "simulation": _env_bool("POSERING_SIMULATION", False),
-
     # A-set cameras on the main PC. Keep these aligned with redlight_ring_2pc_main.py.
     "a_cam0_index": _env_int("POSERING_A_CAM0", 1),
     "a_cam1_index": _env_int("POSERING_A_CAM1", 2),
     "a_backend": os.getenv("POSERING_A_BACKEND", "DEFAULT"),
     "a_calib_file": os.getenv("POSERING_A_CALIB", ""),
 
-    # B-set can be read locally or received from the sub PC over UDP.
-    "use_b_set": _env_bool("POSERING_USE_B_SET", True),
-    "use_remote_b_set": _env_bool("POSERING_USE_REMOTE_B", True),
+    # B-set is always received from the sub PC over UDP. Do not use laptop/OBS/iPhone cameras.
+    "use_b_set": True,
+    "use_remote_b_set": True,
     "b_cam0_index": _env_int("POSERING_B_CAM0", 4),
     "b_cam1_index": _env_int("POSERING_B_CAM1", 5),
     "b_backend": os.getenv("POSERING_B_BACKEND", "DSHOW"),
@@ -126,6 +123,7 @@ PREPARED_GAME = {
     "status": "idle",
 }
 
+POSE_CAPTURE_DRAFTS = {}
 POSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poses.json")
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 VS_POSES_PER_TURN = 5
@@ -182,6 +180,16 @@ def _front_camera_b64():
         return None
     import base64
     return base64.b64encode(jpeg).decode("ascii")
+
+
+def _front_cameras_b64():
+    import base64
+    photos = {}
+    for cam_id in (0, 1):
+        jpeg = engine.get_frame(cam_id)
+        if jpeg:
+            photos[f"cam{cam_id}"] = base64.b64encode(jpeg).decode("ascii")
+    return photos
 
 
 def _snapshot_target_points(snapshot):
@@ -334,7 +342,6 @@ def _vs_engine_settings(players):
         "difficulty": "medium",
         "poses_per_round": VS_POSES_PER_TURN,
         "num_rounds": 1,
-        "simulation": CONFIG["simulation"],
         "a_cam0_index": CONFIG["a_cam0_index"],
         "a_cam1_index": CONFIG["a_cam1_index"],
         "a_backend": CONFIG["a_backend"],
@@ -518,6 +525,50 @@ def api_poses():
     return jsonify(_load_poses())
 
 
+@app.route("/api/poses/capture", methods=["POST"])
+def api_capture_pose():
+    payload = request.get_json(force=True) or {}
+    name = str(payload.get("name", "")).strip()
+    difficulty = str(payload.get("difficulty", "medium")).strip().lower()
+    if difficulty == "high":
+        difficulty = "hard"
+
+    if not name:
+        return jsonify({"error": "Pose name is required"}), 400
+    if difficulty not in DIFFICULTIES:
+        return jsonify({"error": "Difficulty must be easy, medium, or hard"}), 400
+
+    state = engine.get_state()
+    if state.get("camera_error") or state.get("live_error"):
+        return jsonify({"error": "Camera error. Check all four cameras before capturing a pose."}), 409
+
+    snapshot = engine.get_current_pose_snapshot()
+    if not snapshot or not snapshot.get("sets"):
+        return jsonify({"error": "No live pose coordinates are available yet"}), 409
+
+    photos = _front_cameras_b64()
+    draft_id = uuid.uuid4().hex
+    draft = {
+        "id": draft_id,
+        "name": name,
+        "difficulty": difficulty,
+        "created_at": time.time(),
+        "sets": snapshot["sets"],
+        "target_points": snapshot.get("target_points", []),
+        "source": snapshot.get("source", "live"),
+        "setup_photo": photos.get("cam0"),
+        "setup_photos": photos,
+    }
+    POSE_CAPTURE_DRAFTS[draft_id] = draft
+    return jsonify({
+        "capture_id": draft_id,
+        "name": name,
+        "difficulty": difficulty,
+        "setup_photo": draft["setup_photo"],
+        "setup_photos": photos,
+    })
+
+
 @app.route("/api/poses", methods=["POST"])
 def api_save_pose():
     payload = request.get_json(force=True) or {}
@@ -531,17 +582,41 @@ def api_save_pose():
     if difficulty not in DIFFICULTIES:
         return jsonify({"error": "Difficulty must be easy, medium, or hard"}), 400
 
-    snapshot = engine.get_current_pose_snapshot()
-    if not snapshot or not snapshot.get("sets"):
-        return jsonify({"error": "No live pose coordinates are available yet"}), 409
+    capture_id = str(payload.get("capture_id", "")).strip()
+    draft = POSE_CAPTURE_DRAFTS.pop(capture_id, None) if capture_id else None
+    if capture_id and draft is None:
+        return jsonify({"error": "Captured pose expired. Please take the pose again."}), 409
+    if draft is None:
+        state = engine.get_state()
+        if state.get("camera_error") or state.get("live_error"):
+            return jsonify({"error": "Camera error. Check all four cameras before saving a pose."}), 409
+
+        snapshot = engine.get_current_pose_snapshot()
+        if not snapshot or not snapshot.get("sets"):
+            return jsonify({"error": "No live pose coordinates are available yet"}), 409
+
+        photos = _front_cameras_b64()
+        draft = {
+            "name": name,
+            "difficulty": difficulty,
+            "created_at": time.time(),
+            "sets": snapshot["sets"],
+            "target_points": snapshot.get("target_points", []),
+            "setup_photo": photos.get("cam0"),
+            "setup_photos": photos,
+            "source": snapshot.get("source", "live"),
+        }
 
     pose = {
         "id": uuid.uuid4().hex,
         "name": name,
         "difficulty": difficulty,
-        "created_at": time.time(),
-        "sets": snapshot["sets"],
-        "source": snapshot.get("source", "live"),
+        "created_at": draft.get("created_at", time.time()),
+        "sets": draft["sets"],
+        "target_points": draft.get("target_points", []),
+        "setup_photo": draft.get("setup_photo"),
+        "setup_photos": draft.get("setup_photos", {}),
+        "source": draft.get("source", "live"),
     }
     poses = _load_poses()
     poses.append(pose)
@@ -630,7 +705,8 @@ def on_start_game(data):
         "difficulty":      data.get("difficulty", "medium"),
         "poses_per_round": int(data.get("poses_per_round", 5)),
         "num_rounds":      int(data.get("num_rounds", 3)),
-        "simulation":      CONFIG["simulation"],
+        "time_per_pose":   data.get("time_per_pose"),
+        "no_time_limit":   bool(data.get("no_time_limit")),
         "a_cam0_index":    CONFIG["a_cam0_index"],
         "a_cam1_index":    CONFIG["a_cam1_index"],
         "a_backend":       CONFIG["a_backend"],
@@ -797,7 +873,7 @@ if __name__ == "__main__":
 
     # Start game engine
     engine.start()
-    print(f"[Server] Game engine started (simulation={CONFIG['simulation']})")
+    print("[Server] Game engine started (live cameras only)")
 
     if CONFIG["ble_enabled"]:
         print(f"[Server] BLE enabled for {CONFIG['ble_device_name']}")
@@ -815,7 +891,7 @@ if __name__ == "__main__":
     print(f"  http://localhost:{CONFIG['port']}")
     print(f"  Player  → http://localhost:{CONFIG['port']}/player")
     print(f"  Operator→ http://localhost:{CONFIG['port']}/operator")
-    print(f"  Mode    : {'SIMULATION' if CONFIG['simulation'] else 'LIVE'}")
+    print("  Mode    : LIVE CAMERAS ONLY")
     print(f"{'='*50}\n")
 
     socketio.run(

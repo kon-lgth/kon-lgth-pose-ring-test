@@ -315,6 +315,10 @@
       from { transform: scale(2.2); opacity: 0; }
       to   { transform: scale(1);   opacity: 1; }
     }
+    @keyframes op-countdown-pop {
+      from { transform: scale(2.2); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
 
     /* Pose modal */
     .modal-backdrop {
@@ -329,7 +333,7 @@
     }
     .modal-backdrop.show { display: flex; }
     .pose-modal {
-      width: min(520px, 94vw);
+      width: min(760px, 94vw);
       background: #0a0920;
       border: 3px solid #60a5fa;
       padding: 1.2rem;
@@ -361,6 +365,69 @@
       font-size: var(--op-ui-font);
       color: #c4b5fd;
       line-height: 2;
+    }
+    .pose-camera-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.8rem;
+      margin: 1rem 0;
+    }
+    .pose-camera-card {
+      border: 2px solid #312e81;
+      background: #050514;
+      overflow: hidden;
+      position: relative;
+      min-height: 150px;
+    }
+    .pose-camera-card img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      background: #111;
+    }
+    .pose-camera-label {
+      position: absolute;
+      top: 0.45rem;
+      left: 0.45rem;
+      background: #050514;
+      border: 1px solid #60a5fa;
+      color: #e2e8f0;
+      padding: 0.32rem 0.48rem;
+      font-size: 0.5rem;
+    }
+    .pose-capture-countdown {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: rgba(5, 5, 20, 0.92);
+      color: #fff;
+      text-shadow: 0 10px 0 rgba(96,165,250,0.24);
+    }
+    .pose-capture-countdown.show {
+      display: flex;
+    }
+    .pose-capture-countdown .countdown-number {
+      font-size: clamp(5rem, 18vw, 12rem);
+      animation: op-countdown-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    }
+    .pose-review-actions {
+      display: none;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 0.8rem;
+    }
+    .pose-review-actions.show {
+      display: flex;
+    }
+    .camera-start-modal {
+      text-align: center;
+    }
+    .camera-start-modal .btn-row {
+      justify-content: center;
     }
   </style>
 </head>
@@ -433,6 +500,17 @@
               <option value="3" selected>3</option>
               <option value="5">5</option>
             </select>
+          </div>
+          <div class="form-row">
+            <label>TIME LIMIT</label>
+            <select id="s-time-mode">
+              <option value="limited" selected>LIMITED</option>
+              <option value="unlimited">NO LIMIT</option>
+            </select>
+          </div>
+          <div class="form-row" id="timeSecondsRow">
+            <label>SECONDS / POSE</label>
+            <input type="number" id="s-time-seconds" min="10" max="600" step="5" value="60"/>
           </div>
         </div>
         <button class="ctrl-btn start" onclick="startGame()">▶ START / RESUME</button>
@@ -554,11 +632,61 @@
         <option value="hard">HIGH</option>
       </select>
 
+      <div class="pose-camera-grid" id="poseLivePreview">
+        <div class="pose-camera-card">
+          <img src="/video_feed/0" alt="Front Camera 0 live preview"/>
+          <div class="pose-camera-label">FRONT CAM 0</div>
+        </div>
+        <div class="pose-camera-card">
+          <img src="/video_feed/1" alt="Front Camera 1 live preview"/>
+          <div class="pose-camera-label">FRONT CAM 1</div>
+        </div>
+      </div>
+
+      <div class="pose-camera-grid" id="poseReviewPreview" style="display:none;">
+        <div class="pose-camera-card">
+          <img id="poseReviewCam0" alt="Captured front camera 0"/>
+          <div class="pose-camera-label">SAVED CAM 0</div>
+        </div>
+        <div class="pose-camera-card">
+          <img id="poseReviewCam1" alt="Captured front camera 1"/>
+          <div class="pose-camera-label">SAVED CAM 1</div>
+        </div>
+      </div>
+
       <div class="pose-confirm-text" id="poseConfirmText"></div>
-      <div class="btn-row">
+      <div class="btn-row" id="poseEditActions">
         <button class="ctrl-btn reset" onclick="closePoseModal()">CANCEL</button>
         <button class="ctrl-btn start" onclick="savePoseFromModal()">CONFIRM SAVE</button>
       </div>
+      <div class="pose-review-actions" id="poseReviewActions">
+        <button class="ctrl-btn reset" onclick="retakePoseCapture()">TAKE AGAIN</button>
+        <button class="ctrl-btn start" onclick="confirmCapturedPose()">YES, SAVE POSE</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pose-capture-countdown" id="poseCaptureCountdown">
+    <div class="countdown-number" id="poseCaptureNumber">3</div>
+  </div>
+
+  <div class="modal-backdrop" id="cameraModal">
+    <div class="pose-modal">
+      <h2>CAMERA CHECK</h2>
+      <div class="pose-confirm-text" id="cameraModalText">
+        One or more cameras are not available. Check USB connections, camera indexes, and the B-set sender.
+      </div>
+      <div class="btn-row">
+        <button class="ctrl-btn start" onclick="closeCameraModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="startCameraModal">
+    <div class="pose-modal camera-start-modal">
+      <h2>CAMERA CHECK</h2>
+      <div class="pose-confirm-text" id="startCameraModalText"></div>
+      <div class="btn-row" id="startCameraModalActions"></div>
     </div>
   </div>
 

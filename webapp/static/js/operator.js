@@ -30,6 +30,66 @@ socket.on('pose_error', data => {
   flash((data && data.error) || 'Pose error', 'red');
 });
 
+let cameraModalShown = false;
+let latestCameraError = '';
+const failedFeeds = new Set();
+let latestState = {};
+let pendingStartPayload = null;
+
+const operatorSound = {
+  ctx: null,
+  context() {
+    if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  },
+  effectsAllowed() {
+    return audioSettings.effects_enabled !== false && Number(audioSettings.effects_volume || 0) > 0;
+  },
+  tone(freq, duration = 0.12, volume = 0.16, type = 'square') {
+    if (!this.effectsAllowed()) return;
+    const ctx = this.context();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(volume * audioSettings.effects_volume, ctx.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration + 0.02);
+  },
+  beep(n) {
+    this.tone(n > 0 ? 440 + (3 - n) * 90 : 880, 0.22, 0.2, 'square');
+  },
+  click() {
+    if (!this.effectsAllowed()) return;
+    const ctx = this.context();
+    const play = (freq, when, duration, volume) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, when);
+      gain.gain.setValueAtTime(0.0001, when);
+      gain.gain.exponentialRampToValueAtTime(volume * audioSettings.effects_volume, when + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(when);
+      osc.stop(when + duration + 0.04);
+    };
+    const t = ctx.currentTime + 0.01;
+    play(740, t, 0.06, 0.034);
+    play(988, t + 0.055, 0.08, 0.028);
+  },
+  modalOpen() {
+    this.tone(523, 0.09, 0.1, 'triangle');
+    setTimeout(() => this.tone(784, 0.12, 0.08, 'triangle'), 70);
+  },
+};
+
 function applyLobbySetup(setup) {
   if (!setup || setup.status !== 'ready_for_operator') return;
   if (Array.isArray(setup.players) && setup.players.length) {
@@ -45,23 +105,108 @@ function applyLobbySetup(setup) {
 window.startGame = function () {
   const players = document.getElementById('s-players').value
     .split(',').map(s => s.trim()).filter(Boolean);
-  socket.emit('cmd_start_game', {
+  const noTimeLimit = document.getElementById('s-time-mode')?.value === 'unlimited';
+  const seconds = parseFloat(document.getElementById('s-time-seconds')?.value || '60');
+  requestStartGame({
     players:         players.length ? players : ['Player 1'],
     difficulty:      document.getElementById('s-difficulty').value,
     poses_per_round: parseInt(document.getElementById('s-poses').value),
     num_rounds:      parseInt(document.getElementById('s-rounds').value),
+    no_time_limit:   noTimeLimit,
+    time_per_pose:   noTimeLimit ? null : seconds,
   });
-    flash('Start requested', 'green');
+};
+
+function emitStartGame(payload) {
+  socket.emit('cmd_start_game', payload);
+  flash('Start requested', 'green');
+}
+
+function cameraIssuesForStart() {
+  const status = latestState.camera_status || {};
+  const issues = [];
+  ['cam0', 'cam1', 'cam2', 'cam3'].forEach((cam, index) => {
+    if (status[cam] === false) issues.push({ cam, label: `CAM ${index}`, front: index < 2 });
+  });
+  failedFeeds.forEach(label => {
+    const index = Number(String(label).replace('CAM ', ''));
+    const cam = `cam${index}`;
+    if (!issues.some(issue => issue.cam === cam)) {
+      issues.push({ cam, label, front: index < 2 });
+    }
+  });
+  const errorText = latestState.live_error || latestState.camera_error || '';
+  if (errorText && issues.length === 0) {
+    const front = /A Cam[01]|cam[01]|CAM [01]/i.test(errorText);
+    issues.push({ cam: 'unknown', label: errorText, front });
+  }
+  return issues;
+}
+
+function showStartCameraModal(issues, canProceed) {
+  const modal = document.getElementById('startCameraModal');
+  const text = document.getElementById('startCameraModalText');
+  const actions = document.getElementById('startCameraModalActions');
+  const list = issues.map(issue => issue.label).join(', ');
+  if (text) {
+    text.innerHTML = canProceed
+      ? `Camera warning:<br>${list}<br><br>Do you want to proceed anyway?`
+      : `Cannot start the game.<br><br>The front camera must be working:<br>${list}`;
+  }
+  if (actions) {
+    actions.innerHTML = canProceed
+      ? `<button class="ctrl-btn reset" onclick="closeStartCameraModal()">CANCEL</button>
+         <button class="ctrl-btn start" onclick="proceedStartAfterCameraWarning()">PROCEED</button>`
+      : `<button class="ctrl-btn start" onclick="closeStartCameraModal()">OK</button>`;
+  }
+  modal?.classList.add('show');
+  operatorSound.modalOpen();
+}
+
+function requestStartGame(payload) {
+  const issues = cameraIssuesForStart();
+  if (!issues.length) {
+    emitStartGame(payload);
+    return;
+  }
+  pendingStartPayload = payload;
+  const frontMissing = issues.some(issue => issue.front);
+  showStartCameraModal(issues, !frontMissing);
+}
+
+window.closeStartCameraModal = function () {
+  document.getElementById('startCameraModal')?.classList.remove('show');
+  pendingStartPayload = null;
+};
+
+window.proceedStartAfterCameraWarning = function () {
+  const payload = pendingStartPayload;
+  closeStartCameraModal();
+  if (payload) emitStartGame({ ...payload, allow_camera_warning: true });
 };
 
 window.setOrigin  = function () { socket.emit('cmd_set_origin');  flash('Origin is handled by saved A/B targets', 'yellow'); };
 window.setTargets = function () { socket.emit('cmd_set_targets'); flash('Saving target pose...', 'blue'); };
 window.resetGame  = function () { socket.emit('cmd_reset');       flash('Reset!', 'red'); };
 window.nextPose   = function () { socket.emit('cmd_next_pose');   flash('Next pose!', 'green'); };
+window.closeCameraModal = function () {
+  document.getElementById('cameraModal')?.classList.remove('show');
+};
+
+function showCameraModal(message) {
+  if (cameraModalShown) return;
+  cameraModalShown = true;
+  const text = document.getElementById('cameraModalText');
+  if (text) text.textContent = message;
+  document.getElementById('cameraModal')?.classList.add('show');
+  operatorSound.modalOpen();
+}
 
 /* ── Pose library ── */
 let poseLibrary = [];
 let selectedPoseId = '';
+let capturedPoseDraft = null;
+let poseCaptureBusy = false;
 
 function difficultyLabel(value) {
   if (value === 'hard') return 'HIGH';
@@ -103,9 +248,9 @@ function updatePoseMeta() {
   }
 
   const pointCount = COLOR_ORDER.filter(color => (
-    ['A', 'B', 'SIM'].some(setName => Array.isArray(pose.sets && pose.sets[setName] && pose.sets[setName][color]))
+    ['A', 'B'].some(setName => Array.isArray(pose.sets && pose.sets[setName] && pose.sets[setName][color]))
   )).length;
-  const counts = ['A', 'B', 'SIM'].map(setName => {
+  const counts = ['A', 'B'].map(setName => {
     const set = pose.sets && pose.sets[setName];
     if (!set) return null;
     const count = COLOR_ORDER.filter(color => Array.isArray(set[color])).length;
@@ -122,31 +267,127 @@ window.openPoseModal = function () {
   const name = document.getElementById('poseName');
   const difficulty = document.getElementById('poseDifficulty');
   const confirm = document.getElementById('poseConfirmText');
+  capturedPoseDraft = null;
+  poseCaptureBusy = false;
   if (name) name.value = '';
   if (difficulty) difficulty.value = document.getElementById('s-difficulty')?.value || 'medium';
-  if (confirm) confirm.textContent = 'Current live coordinates from A/B camera sets will be stored locally.';
+  const cam0 = document.getElementById('poseReviewCam0');
+  const cam1 = document.getElementById('poseReviewCam1');
+  if (cam0) cam0.removeAttribute('src');
+  if (cam1) cam1.removeAttribute('src');
+  setPoseCaptureStage('edit');
+  if (confirm) confirm.textContent = 'Check both front cameras, then confirm. A 3, 2, 1 countdown will capture the pose coordinates and photos.';
   if (modal) modal.classList.add('show');
+  operatorSound.modalOpen();
 };
 
 window.closePoseModal = function () {
   document.getElementById('poseModal')?.classList.remove('show');
 };
 
-window.savePoseFromModal = async function () {
+function setPoseCaptureStage(stage, message) {
+  const live = document.getElementById('poseLivePreview');
+  const review = document.getElementById('poseReviewPreview');
+  const editActions = document.getElementById('poseEditActions');
+  const reviewActions = document.getElementById('poseReviewActions');
+  const text = document.getElementById('poseConfirmText');
+  if (live) live.style.display = stage === 'review' ? 'none' : 'grid';
+  if (review) review.style.display = stage === 'review' ? 'grid' : 'none';
+  editActions?.classList.toggle('show', stage !== 'review');
+  if (editActions) editActions.style.display = stage === 'review' ? 'none' : 'flex';
+  reviewActions?.classList.toggle('show', stage === 'review');
+  if (text && message) text.textContent = message;
+}
+
+function poseCaptureInputs() {
   const name = document.getElementById('poseName')?.value.trim();
   const difficulty = document.getElementById('poseDifficulty')?.value || 'medium';
   if (!name) {
     flash('Pose name is required', 'red');
-    return;
+    return null;
   }
-  if (!confirm(`Save current 3D coordinates as "${name}" (${difficultyLabel(difficulty)})?`)) {
-    return;
-  }
+  return { name, difficulty };
+}
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function runPoseCaptureCountdown() {
+  const overlay = document.getElementById('poseCaptureCountdown');
+  const number = document.getElementById('poseCaptureNumber');
+  if (!overlay) return;
+  overlay.classList.add('show');
+  for (const n of [3, 2, 1]) {
+    if (number) {
+      number.textContent = String(n);
+      number.className = 'countdown-number';
+      void number.offsetWidth;
+      number.className = 'countdown-number';
+    }
+    operatorSound.beep(n);
+    await wait(850);
+  }
+  overlay.classList.remove('show');
+}
+
+async function capturePoseDraft() {
+  const inputs = poseCaptureInputs();
+  if (!inputs || poseCaptureBusy) return null;
+  poseCaptureBusy = true;
+  setPoseCaptureStage('capture', 'Hold still. Capturing pose in 3, 2, 1...');
+  await runPoseCaptureCountdown();
+
+  const res = await fetch('/api/poses/capture', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inputs),
+  });
+  const body = await res.json().catch(() => ({}));
+  poseCaptureBusy = false;
+  if (!res.ok) {
+    setPoseCaptureStage('edit', 'Capture failed. Check cameras and marker visibility, then try again.');
+    flash(body.error || 'Could not capture pose', 'red');
+    return null;
+  }
+  capturedPoseDraft = { ...body, ...inputs };
+  const cam0 = document.getElementById('poseReviewCam0');
+  const cam1 = document.getElementById('poseReviewCam1');
+  if (cam0) {
+    if (body.setup_photos?.cam0) cam0.src = `data:image/jpeg;base64,${body.setup_photos.cam0}`;
+    else cam0.removeAttribute('src');
+  }
+  if (cam1) {
+    if (body.setup_photos?.cam1) cam1.src = `data:image/jpeg;base64,${body.setup_photos.cam1}`;
+    else cam1.removeAttribute('src');
+  }
+  setPoseCaptureStage('review', 'Is this pose photo OK? Save it, or take the pose again.');
+  operatorSound.modalOpen();
+  return capturedPoseDraft;
+}
+
+window.savePoseFromModal = async function () {
+  await capturePoseDraft();
+};
+
+window.retakePoseCapture = async function () {
+  capturedPoseDraft = null;
+  await capturePoseDraft();
+};
+
+window.confirmCapturedPose = async function () {
+  if (!capturedPoseDraft?.capture_id) {
+    flash('Capture the pose first', 'yellow');
+    return;
+  }
   const res = await fetch('/api/poses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, difficulty }),
+    body: JSON.stringify({
+      name: capturedPoseDraft.name,
+      difficulty: capturedPoseDraft.difficulty,
+      capture_id: capturedPoseDraft.capture_id,
+    }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -397,7 +638,12 @@ function updateOpCountdown(gs, countdown) {
 
 /* ── Main state apply ── */
 function applyState(state) {
+  latestState = state || {};
   const gs = state.game_state;
+  latestCameraError = state.camera_error || state.live_error || '';
+  if (latestCameraError) {
+    setTimeout(() => showCameraModal(`Camera startup failed: ${latestCameraError}`), 2200);
+  }
   updateStateBadge(gs);
   updateOpCountdown(gs, state.countdown);
 
@@ -411,7 +657,11 @@ function applyState(state) {
 
   const isEnd = gs === 'GAME_OVER' || gs === 'GAME_CLEAR';
   const timer = document.getElementById('opTimer');
-  if (timer)  timer.textContent = isEnd ? '—' : `${Math.ceil(state.time_left || 0)}s`;
+  if (timer) {
+    timer.textContent = state.no_time_limit
+      ? `NO LIMIT | ${Number(state.elapsed_time || 0).toFixed(1)}s`
+      : (isEnd ? '—' : `${Math.ceil(state.time_left || 0)}s`);
+  }
 
   const holdEl = document.getElementById('opHold');
   if (holdEl) holdEl.style.width = `${(state.hold_progress || 0) * 100}%`;
@@ -428,9 +678,37 @@ function applyState(state) {
 
   const simBadge = document.getElementById('simBadge');
   if (simBadge) {
-    simBadge.textContent = state.simulation ? '⚠ SIMULATION MODE' : '🟢 LIVE';
-    simBadge.style.color = state.simulation ? '#facc15' : '#4ade80';
+    simBadge.textContent = latestCameraError ? '⚠ CAMERA ERROR' : '🟢 LIVE CAMERAS';
+    simBadge.style.color = latestCameraError ? '#f87171' : '#4ade80';
   }
+}
+
+function bindTimeControls() {
+  const mode = document.getElementById('s-time-mode');
+  const row = document.getElementById('timeSecondsRow');
+  if (!mode || !row) return;
+  const sync = () => {
+    row.style.display = mode.value === 'unlimited' ? 'none' : 'block';
+  };
+  mode.addEventListener('change', sync);
+  sync();
+}
+
+function bindCameraFeedWarnings() {
+  ['feed0', 'feed1', 'feed2', 'feed3'].forEach((id) => {
+    const img = document.getElementById(id);
+    if (!img) return;
+    img.addEventListener('error', () => {
+      failedFeeds.add(id.replace('feed', 'CAM '));
+      setTimeout(() => {
+        if (!failedFeeds.size) return;
+        showCameraModal(`No image received from: ${Array.from(failedFeeds).join(', ')}. Check camera connections and the B-set sender.`);
+      }, 2200);
+    });
+    img.addEventListener('load', () => {
+      failedFeeds.delete(id.replace('feed', 'CAM '));
+    });
+  });
 }
 
 /* ── BLE status polling ── */
@@ -447,13 +725,6 @@ function pollBLE() {
         </div>`;
         return;
       }
-      if (status.simulation) {
-        el.innerHTML = `<div class="ble-row">
-          <span class="ble-dot disconnected"></span>simulation mode
-        </div>`;
-        return;
-      }
-
       const connected = !!status.connected;
       const cls = connected ? 'connected' : 'disconnected';
       const visible = status.stage_visible ? 'stage visible' : 'out of stage';
@@ -473,6 +744,13 @@ pollBLE();
 /* ── Init ── */
 buildColorStatus();
 bindAudioControls();
+bindTimeControls();
+bindCameraFeedWarnings();
+document.addEventListener('click', (event) => {
+  if (event.target.closest('button')) {
+    operatorSound.click();
+  }
+});
 applyAudioSettings(audioSettings);
 fetchPoseLibrary();
 document.getElementById('poseSelect')?.addEventListener('change', updatePoseMeta);

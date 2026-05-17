@@ -27,9 +27,9 @@ if ROOT_DIR not in sys.path:
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 DIFFICULTIES = {
-    "easy": {"clear_dist_mm": 500.0, "hold_time": 1.5, "time_per_pose": 75},
+    "easy": {"clear_dist_mm": 430.0, "hold_time": 1.5, "time_per_pose": 75},
     "medium": {"clear_dist_mm": 390.0, "hold_time": 2.0, "time_per_pose": 60},
-    "hard": {"clear_dist_mm": 250.0, "hold_time": 3.0, "time_per_pose": 45},
+    "hard": {"clear_dist_mm": 180.0, "hold_time": 3.0, "time_per_pose": 45},
 }
 
 
@@ -134,11 +134,13 @@ class GameEngine:
         self._time_per_pose = float(diff["time_per_pose"])
         if settings.get("vs_no_timeout"):
             self._time_per_pose = 9999.0
+        if "time_per_pose" in settings and settings.get("time_per_pose") not in (None, ""):
+            self._time_per_pose = float(settings.get("time_per_pose"))
+        self._no_time_limit = bool(settings.get("no_time_limit") or settings.get("vs_no_timeout"))
         self._poses_per_round = int(settings.get("poses_per_round", 5))
         self._num_rounds = int(settings.get("num_rounds", 3))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
         self._player_colors = dict(settings.get("player_colors", {}) or {})
-        self._simulation = bool(settings.get("simulation", False))
 
     def _current_player(self, ctx):
         if not self._players:
@@ -177,13 +179,14 @@ class GameEngine:
             "player_colors": dict(getattr(self, "_player_colors", {})),
             "current_player": self._current_player({"pose": 0}),
             "time_left": self._time_per_pose,
+            "no_time_limit": self._no_time_limit,
+            "elapsed_time": 0.0,
             "hold_progress": 0.0,
             "all_inside": False,
             "origin_set": True,
             "targets_set": False,
             "message": message,
             "difficulty": self._settings.get("difficulty", "medium"),
-            "simulation": self._simulation,
             "countdown": None,
             "pose_result": None,
             "current_pose_name": None,
@@ -191,6 +194,8 @@ class GameEngine:
             "colors": self._blank_colors(),
             "ble": {},
             "live_error": self._live_error,
+            "camera_error": None,
+            "camera_status": {"cam0": True, "cam1": True, "cam2": True, "cam3": True},
         }
 
     def _pop_commands(self):
@@ -221,13 +226,14 @@ class GameEngine:
                 "player_colors": dict(getattr(self, "_player_colors", {})),
                 "current_player": self._current_player(ctx),
                 "time_left": ctx.get("time_left", self._time_per_pose),
+                "no_time_limit": self._no_time_limit,
+                "elapsed_time": ctx.get("elapsed_time", 0.0),
                 "hold_progress": ctx.get("hold_progress", 0.0),
                 "all_inside": ctx.get("all_inside", False),
                 "origin_set": True,
                 "targets_set": ctx.get("targets_set", False),
                 "message": ctx.get("message", ""),
                 "difficulty": self._settings.get("difficulty", "medium"),
-                "simulation": self._simulation,
                 "countdown": ctx.get("countdown_n"),
                 "pose_result": ctx.get("pose_result"),
                 "current_pose_name": ctx.get("current_pose_name"),
@@ -235,20 +241,27 @@ class GameEngine:
                 "colors": colors,
                 "ble": dict(self._ble_status),
                 "live_error": self._live_error,
+                "camera_error": ctx.get("camera_error"),
+                "camera_status": ctx.get("camera_status", {}),
             }
 
     def _run(self):
-        if self._simulation:
-            self._run_simulation()
-            return
-
         try:
             self._run_live()
         except Exception as exc:
             self._live_error = str(exc)
-            print(f"[WebEngine] Live mode failed, switching to simulation: {exc}")
-            self._simulation = True
-            self._run_simulation()
+            print(f"[WebEngine] Live mode failed: {exc}")
+            self._publish_camera_error(str(exc))
+
+    def _publish_camera_error(self, message):
+        with self._frame_lock:
+            for cam_id in (0, 1, 2, 3):
+                self._jpeg[cam_id] = _encode_jpeg(_blank_frame(f"CAM {cam_id} unavailable", height=480))
+        with self._lock:
+            self._state = self._blank_state("Camera error. Check all camera connections.")
+            self._state["live_error"] = message
+            self._state["camera_error"] = message
+            self._state["camera_status"] = {"cam0": False, "cam1": False, "cam2": False, "cam3": False}
 
     def _configure_core(self):
         import redlight_ring_2pc_main as core
@@ -275,13 +288,19 @@ class GameEngine:
             "targets_set": False,
             "message": "Ready. Set targets, then start the game.",
             "time_left": self._time_per_pose,
+            "no_time_limit": self._no_time_limit,
+            "elapsed_time": 0.0,
             "hold_progress": 0.0,
             "all_inside": False,
             "clear_logged": False,
             "current_pose_name": None,
             "current_pose_difficulty": self._settings.get("difficulty", "medium"),
+            "current_pose_photo": None,
+            "current_pose_photos": {},
             "target_slots": [],
             "target_claims": {},
+            "camera_error": None,
+            "camera_status": {"cam0": True, "cam1": True, "cam2": True, "cam3": True},
         }
 
     def _target_slots_from_pose_sets(self, sets, allowed_sets=None):
@@ -338,18 +357,6 @@ class GameEngine:
                         "source": "B_LIVE" if st.get("live") else "LAST_USED",
                         "y_diff": st.get("y_diff"),
                     }
-        return current
-
-    def _current_points_from_color_state(self, colors):
-        current = {color: {} for color in COLOR_ORDER}
-        for color in COLOR_ORDER:
-            point = (colors or {}).get(color, {}).get("current")
-            if point is not None:
-                current[color]["SIM"] = {
-                    "point": np.array(point, dtype=np.float64),
-                    "source": "SIM",
-                    "y_diff": (colors or {}).get(color, {}).get("y_diff"),
-                }
         return current
 
     def _target_distance_for_color(self, color_current, slot):
@@ -523,6 +530,8 @@ class GameEngine:
             ctx["targets_set"] = bool(target_slots)
             ctx["current_pose_name"] = pose.get("name", "Saved pose")
             ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
+            ctx["current_pose_photo"] = pose.get("setup_photo")
+            ctx["current_pose_photos"] = pose.get("setup_photos") or {}
             ctx["message"] = (
                 f"Loaded pose: {ctx['current_pose_name']}"
                 if target_slots
@@ -553,6 +562,8 @@ class GameEngine:
         ctx["targets_set"] = bool(target_slots)
         ctx["current_pose_name"] = pose.get("name", "Saved pose")
         ctx["current_pose_difficulty"] = difficulty
+        ctx["current_pose_photo"] = pose.get("setup_photo")
+        ctx["current_pose_photos"] = pose.get("setup_photos") or {}
         ctx["game_state"] = GameState.IDLE
         ctx["pose_result"] = None
         ctx["all_inside_t"] = None
@@ -565,13 +576,7 @@ class GameEngine:
 
     def _update_current_pose_cache(self, set_a=None, set_b=None, colors=None):
         if set_a is None:
-            sets = {
-                "SIM": {
-                    color: colors[color]["current"]
-                    for color in COLOR_ORDER
-                    if colors and colors.get(color, {}).get("current") is not None
-                }
-            }
+            sets = {"A": {}, "B": {}}
         else:
             sets = {"A": {}, "B": {}}
             for color in COLOR_ORDER:
@@ -598,12 +603,36 @@ class GameEngine:
                 "target_points": target_points,
                 "target_point_count": len(target_points),
                 "captured_at": time.time(),
-                "source": "simulation" if set_a is None else "live",
+                "source": "live",
             }
+
+    def _camera_health_error(self, set_b, use_b_set, use_remote_b_set):
+        if not use_b_set:
+            return "B camera set is disabled. Four cameras are required for live play."
+        if set_b is None:
+            return "B camera set is not available. Four cameras are required for live play."
+        if use_remote_b_set and hasattr(set_b, "latest_receive_time"):
+            age = time.time() - set_b.latest_receive_time if set_b.latest_receive_time > 0 else 999.0
+            if age > 1.5:
+                return "No live data from B cameras. Start the sub PC sender and check the UDP port."
+        return None
+
+    def _camera_health_status(self, error):
+        status = {"cam0": True, "cam1": True, "cam2": True, "cam3": True}
+        if error:
+            status["cam2"] = False
+            status["cam3"] = False
+        return status
 
     def _process_commands(self, commands, ctx, set_a=None, set_b=None):
         for cmd, data in commands:
             if cmd == "start_game":
+                camera_status = ctx.get("camera_status") or {}
+                front_missing = camera_status.get("cam0") is False or camera_status.get("cam1") is False
+                if ctx.get("camera_error") and (front_missing or not (data or {}).get("allow_camera_warning")):
+                    ctx["message"] = "Camera error. Check all four cameras before starting."
+                    continue
+
                 if data:
                     self._settings.update(data)
                     self._apply_settings(self._settings)
@@ -630,13 +659,8 @@ class GameEngine:
                 ctx["message"] = "Origin is implicit in the saved A/B target coordinates."
 
             elif cmd == "set_targets":
-                if set_a is None:
-                    ctx["targets_set"] = True
-                    ctx["target_slots"] = []
-                    ctx["target_claims"] = {}
-                    ctx["current_pose_name"] = "Manual simulation pose"
-                    ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
-                    ctx["message"] = "Simulation target pose saved. Press START."
+                if ctx.get("camera_error"):
+                    ctx["message"] = "Camera error. Target pose was not saved."
                     continue
 
                 saved_a, missing_a = set_a.set_targets_from_current()
@@ -656,6 +680,8 @@ class GameEngine:
                 if target_slots:
                     ctx["current_pose_name"] = "Manual target pose"
                     ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
+                    ctx["current_pose_photos"] = self._capture_snapshots()
+                    ctx["current_pose_photo"] = ctx["current_pose_photos"].get("cam0")
                     ctx["message"] = f"{len(target_slots)} target points saved. Press START."
                 else:
                     ctx["message"] = "No visible target points were saved."
@@ -727,7 +753,8 @@ class GameEngine:
             )
         )
         ctx["all_inside"] = all_inside
-        ctx["time_left"] = self._time_per_pose
+        ctx["time_left"] = None if self._no_time_limit else self._time_per_pose
+        ctx["elapsed_time"] = 0.0
         ctx["hold_progress"] = 0.0
 
         if ctx["game_state"] == GameState.COUNTDOWN:
@@ -747,7 +774,8 @@ class GameEngine:
 
         elif ctx["game_state"] == GameState.PLAYING:
             elapsed = now - ctx.get("pose_start_t", now)
-            time_left = max(0.0, self._time_per_pose - elapsed)
+            ctx["elapsed_time"] = elapsed
+            time_left = None if self._no_time_limit else max(0.0, self._time_per_pose - elapsed)
             ctx["time_left"] = time_left
 
             if all_inside:
@@ -764,7 +792,7 @@ class GameEngine:
                     ctx["poses_cleared_total"] += 1
                     ctx["game_state"] = GameState.POSE_CLEAR
                     ctx["message"] = "POSE CLEAR. Tap NEXT when ready."
-                    speed_bonus = max(0, int((time_left / self._time_per_pose) * 50))
+                    speed_bonus = 0 if self._no_time_limit else max(0, int((time_left / self._time_per_pose) * 50))
                     points = 100 * ctx["round"] + speed_bonus
                     if current_player:
                         ctx["scores"][current_player] = ctx["scores"].get(current_player, 0) + points
@@ -779,9 +807,9 @@ class GameEngine:
                 )
 
             if (
-                time_left <= 0
+                not self._no_time_limit
+                and time_left <= 0
                 and ctx["game_state"] == GameState.PLAYING
-                and not self._settings.get("vs_no_timeout")
             ):
                 ctx["pose"] += 1
                 ctx["pose_result"] = "timeout"
@@ -806,6 +834,10 @@ class GameEngine:
             "result": ctx.get("pose_result", "unknown"),
             "round": ctx["round"],
             "pose": ctx["pose"],
+            "elapsed_time": ctx.get("elapsed_time", 0.0),
+            "setup_photo": ctx.get("current_pose_photo"),
+            "setup_photos": ctx.get("current_pose_photos", {}),
+            "pose_name": ctx.get("current_pose_name"),
         }
         with self._lock:
             self._snapshot_event = event
@@ -863,7 +895,7 @@ class GameEngine:
         return feedbacks
 
     def _is_live_marker_source(self, source):
-        return source in ["A_LIVE", "B_LIVE", "SIM"]
+        return source in ["A_LIVE", "B_LIVE"]
 
     def _update_multi_ble_status_connect_only(self, core, feedbacks):
         if not feedbacks:
@@ -1134,12 +1166,24 @@ class GameEngine:
         b_calib = self._settings.get("b_calib_file") or core.B_CALIB_FILE
         use_b_set = bool(self._settings.get("use_b_set", core.USE_B_SET))
         use_remote_b_set = bool(self._settings.get("use_remote_b_set", core.USE_REMOTE_B_SET))
+        a_cam0_index = int(self._settings.get("a_cam0_index", core.A_CAM0_INDEX))
+        a_cam1_index = int(self._settings.get("a_cam1_index", core.A_CAM1_INDEX))
+        if a_cam0_index <= 0 or a_cam1_index <= 0:
+            raise RuntimeError(
+                "Invalid main camera index. Camera index 0 is reserved for the built-in laptop camera "
+                "and is not allowed. Connect two external USB cameras and use indexes 1 and 2 or higher."
+            )
+        if not use_b_set or not use_remote_b_set:
+            raise RuntimeError(
+                "Invalid camera mode. PoseRing web app requires two main USB cameras plus two remote "
+                "sub-PC cameras over UDP. Local B cameras, OBS, iPhone, and laptop cameras are not allowed."
+            )
 
         set_a = core.StereoSet(
             "A",
             a_calib,
-            int(self._settings.get("a_cam0_index", core.A_CAM0_INDEX)),
-            int(self._settings.get("a_cam1_index", core.A_CAM1_INDEX)),
+            a_cam0_index,
+            a_cam1_index,
             self._settings.get("a_backend", core.A_BACKEND),
         )
 
@@ -1177,12 +1221,16 @@ class GameEngine:
         ctx = self._make_context()
         last_used = {color: None for color in COLOR_ORDER}
         last_target_live_time = None
+        camera_check_started = time.time()
 
         try:
             while self._running:
                 set_a.read_and_process()
                 if set_b is not None:
                     set_b.read_and_process()
+                if time.time() - camera_check_started >= 2.5:
+                    ctx["camera_error"] = self._camera_health_error(set_b, use_b_set, use_remote_b_set)
+                    ctx["camera_status"] = self._camera_health_status(ctx["camera_error"])
 
                 self._process_commands(self._pop_commands(), ctx, set_a, set_b)
 
@@ -1252,54 +1300,3 @@ class GameEngine:
             set_a.release()
             if set_b is not None:
                 set_b.release()
-
-    def _run_simulation(self):
-        ctx = self._make_context()
-        last_snapshot_state = None
-        with self._frame_lock:
-            self._jpeg[0] = _encode_jpeg(_blank_frame("SIM A CAM 0", height=480))
-            self._jpeg[1] = _encode_jpeg(_blank_frame("SIM A CAM 1", height=480))
-            self._jpeg[2] = _encode_jpeg(_blank_frame("SIM B CAM 0", height=480))
-            self._jpeg[3] = _encode_jpeg(_blank_frame("SIM B CAM 1", height=480))
-
-        while self._running:
-            self._process_commands(self._pop_commands(), ctx)
-
-            now = time.time()
-            colors = {}
-            for i, color in enumerate(COLOR_ORDER):
-                distance = 180.0 + 180.0 * np.sin(now * 0.7 + i * 1.8)
-                inside = bool(distance <= self._clear_dist)
-                colors[color] = {
-                    "status": "OK" if inside else ("CLOSE" if distance <= self._clear_dist * 2 else "FAR"),
-                    "distance": float(abs(distance)),
-                    "inside": inside,
-                    "source": "SIM",
-                    "used_set": "SIM",
-                    "proximity": max(0.0, min(1.0, 1.0 - abs(distance) / (self._clear_dist * 3.0))),
-                    "target": [100.0 * i, 50.0, 200.0],
-                    "current": [100.0 * i + distance, 50.0, 200.0],
-                    "y_diff": 0.0,
-                }
-
-            if ctx.get("target_slots"):
-                colors = self._color_agnostic_colors(
-                    ctx.get("target_slots") or [],
-                    self._current_points_from_color_state(colors),
-                    ctx.setdefault("target_claims", {}),
-                )
-
-            self._tick_game(ctx, colors)
-            self._update_current_pose_cache(colors=colors)
-            self._ble_status = {"enabled": False, "simulation": True}
-
-            if ctx["game_state"] in (GameState.POSE_CLEAR, GameState.TIME_UP):
-                marker = (ctx["game_state"], ctx["round"], ctx["pose"])
-                if marker != last_snapshot_state:
-                    self._queue_snapshot(ctx)
-                    last_snapshot_state = marker
-            else:
-                last_snapshot_state = None
-
-            self._publish(ctx, colors)
-            time.sleep(0.05)
