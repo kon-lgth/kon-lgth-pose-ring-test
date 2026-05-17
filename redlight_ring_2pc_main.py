@@ -155,7 +155,7 @@ CLEAR_DISTANCE_MM = 390.0
 HOLD_TIME_SEC = 2.0
 
 # CLEAR_DISTANCE_MM=390なら、1170mm以内から赤くなり始める
-FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 3.0
+FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 1.5
 
 # 色を見失った時、最後の判定情報を使い続ける最大時間
 LOST_HOLD_SEC = 0.7
@@ -177,8 +177,8 @@ LOWER_RED_2 = np.array([170, 160, 80])
 UPPER_RED_2 = np.array([179, 255, 255])
 
 # 黄色：少し緩める。現在より暗い黄色・薄い黄色も拾う
-LOWER_YELLOW = np.array([16, 55, 45])
-UPPER_YELLOW = np.array([42, 255, 255])
+LOWER_YELLOW = np.array([18, 80, 70])
+UPPER_YELLOW = np.array([40, 255, 255])
 
 # 青：少し緩める。影だけ拾う場合はV下限を下げすぎない
 LOWER_BLUE = np.array([90, 55, 45])
