@@ -151,17 +151,17 @@ A_BACKEND = "DEFAULT"
 B_BACKEND = "DSHOW"
 
 # 判定設定
-CLEAR_DISTANCE_MM = 400.0
+CLEAR_DISTANCE_MM = 390.0
 HOLD_TIME_SEC = 2.0
 
 # CLEAR_DISTANCE_MM=390なら、1170mm以内から赤くなり始める
-FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 1.2
+FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 3.0
 
 # 色を見失った時、最後の判定情報を使い続ける最大時間
 LOST_HOLD_SEC = 0.7
 
 # 色領域の最小面積
-MIN_AREA = 10
+MIN_AREA = 40
 
 kernel = np.ones((5, 5), np.uint8)
 
@@ -169,24 +169,20 @@ kernel = np.ones((5, 5), np.uint8)
 # HSV設定
 # 照明や素材に合わせて調整する
 # =========================
-
-# 赤：少し緩める。暗め・薄めの赤も拾いやすくする
-LOWER_RED_1 = np.array([0, 160, 80])
+LOWER_RED_1 = np.array([0, 120, 50])
 UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 160, 80])
+LOWER_RED_2 = np.array([170, 120, 50])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-# 黄色：少し緩める。現在より暗い黄色・薄い黄色も拾う
-LOWER_YELLOW = np.array([18, 80, 70])
-UPPER_YELLOW = np.array([40, 255, 255])
+LOWER_YELLOW = np.array([20, 80, 80])
+UPPER_YELLOW = np.array([35, 255, 255])
 
-# 青：少し緩める。影だけ拾う場合はV下限を下げすぎない
-LOWER_BLUE = np.array([90, 55, 45])
+LOWER_BLUE = np.array([95, 150, 50])
 UPPER_BLUE = np.array([130, 255, 255])
 
-# 緑：少し緩める。濃い緑・暗い緑を拾いやすくする
-LOWER_GREEN = np.array([30, 25, 10])
-UPPER_GREEN = np.array([105, 255, 245])
+LOWER_GREEN = np.array([40, 60, 50])
+UPPER_GREEN = np.array([85, 255, 255])
+
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 COLOR_CONFIGS = {

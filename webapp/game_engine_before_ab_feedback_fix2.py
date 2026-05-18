@@ -27,9 +27,9 @@ if ROOT_DIR not in sys.path:
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 DIFFICULTIES = {
-    "easy": {"clear_dist_mm": 400.0, "hold_time": 2.0, "time_per_pose": 75},
-    "medium": {"clear_dist_mm": 300.0, "hold_time": 2.0, "time_per_pose": 60},
-    "hard": {"clear_dist_mm": 250.0, "hold_time": 2.0, "time_per_pose": 45},
+    "easy": {"clear_dist_mm": 500.0, "hold_time": 1.5, "time_per_pose": 75},
+    "medium": {"clear_dist_mm": 390.0, "hold_time": 2.0, "time_per_pose": 60},
+    "hard": {"clear_dist_mm": 250.0, "hold_time": 3.0, "time_per_pose": 45},
 }
 
 
@@ -130,13 +130,11 @@ class GameEngine:
     def _apply_settings(self, settings):
         diff = DIFFICULTIES.get(settings.get("difficulty", "medium"), DIFFICULTIES["medium"])
         self._clear_dist = float(diff["clear_dist_mm"])
-        if settings.get("clear_dist_mm") not in (None, ""):
-            self._clear_dist = float(settings.get("clear_dist_mm"))
         self._hold_time = float(diff["hold_time"])
         self._time_per_pose = float(diff["time_per_pose"])
         if settings.get("vs_no_timeout"):
             self._time_per_pose = 9999.0
-        self._poses_per_round = int(settings.get("poses_per_round", 3))
+        self._poses_per_round = int(settings.get("poses_per_round", 5))
         self._num_rounds = int(settings.get("num_rounds", 3))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
         self._player_colors = dict(settings.get("player_colors", {}) or {})
@@ -282,7 +280,6 @@ class GameEngine:
             "clear_logged": False,
             "current_pose_name": None,
             "current_pose_difficulty": self._settings.get("difficulty", "medium"),
-            "current_pose_photos": {},
             "target_slots": [],
         }
 
@@ -478,7 +475,6 @@ class GameEngine:
             ctx["targets_set"] = bool(target_slots)
             ctx["current_pose_name"] = pose.get("name", "Saved pose")
             ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
-            ctx["current_pose_photos"] = pose.get("setup_photos", {}) or {}
             ctx["message"] = (
                 f"Loaded pose: {ctx['current_pose_name']}"
                 if target_slots
@@ -508,7 +504,6 @@ class GameEngine:
         ctx["targets_set"] = bool(target_slots)
         ctx["current_pose_name"] = pose.get("name", "Saved pose")
         ctx["current_pose_difficulty"] = difficulty
-        ctx["current_pose_photos"] = pose.get("setup_photos", {}) or {}
         ctx["game_state"] = GameState.IDLE
         ctx["pose_result"] = None
         ctx["all_inside_t"] = None
@@ -699,7 +694,6 @@ class GameEngine:
                     current_player = self._current_player(ctx)
                     ctx["pose"] += 1
                     ctx["pose_result"] = "cleared"
-                    ctx["elapsed_time"] = elapsed
                     ctx["poses_cleared_total"] += 1
                     ctx["game_state"] = GameState.POSE_CLEAR
                     ctx["message"] = "POSE CLEAR. Tap NEXT when ready."
@@ -724,7 +718,6 @@ class GameEngine:
             ):
                 ctx["pose"] += 1
                 ctx["pose_result"] = "timeout"
-                ctx["elapsed_time"] = elapsed
                 ctx["game_state"] = GameState.TIME_UP
                 ctx["message"] = "TIME'S UP. Tap NEXT when ready."
                 self._queue_snapshot(ctx)
@@ -746,8 +739,6 @@ class GameEngine:
             "result": ctx.get("pose_result", "unknown"),
             "round": ctx["round"],
             "pose": ctx["pose"],
-            "elapsed_time": ctx.get("elapsed_time"),
-            "setup_photos": ctx.get("current_pose_photos", {}) or {},
         }
         with self._lock:
             self._snapshot_event = event
@@ -1099,18 +1090,9 @@ class GameEngine:
                 value = 250
                 reason = "inside_own_goal"
             else:
-                # core.distance_to_red_brightness() returns None when the marker
-                # is farther than FEEDBACK_MAX_DISTANCE_MM.  Passing that None to
-                # int() was crashing the live loop and switching the game into
-                # simulation mode.  Treat that case as visible-but-too-far: keep
-                # the ring white instead of sending a distance brightness.
-                brightness = core.distance_to_red_brightness(distance)
-                if brightness is None:
-                    value = core.BleFeedbackController.STATE_CONNECTED_WHITE
-                    reason = "visible_too_far"
-                else:
-                    value = max(2, min(249, int(brightness)))
-                    reason = "distance_feedback"
+                value = int(core.distance_to_red_brightness(distance))
+                value = max(2, min(249, value))
+                reason = "distance_feedback"
 
             try:
                 controller.set_state(value)

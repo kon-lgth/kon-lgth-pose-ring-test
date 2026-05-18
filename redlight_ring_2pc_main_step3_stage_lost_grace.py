@@ -127,20 +127,6 @@ DISPLAY_MIRROR = True
 VIEW_W = 320
 VIEW_H = 240
 
-# 写真保存設定
-# sキーで出題時写真、ALL CLEAR時にクリア時写真と比較画像を保存する。
-ENABLE_PHOTO_CAPTURE = True
-PHOTO_BASE_DIR = "pose_photos"
-PHOTO_WINDOW_NAME = "PoseRing Result Photos"
-PHOTO_RESULT_W = 640
-PHOTO_RESULT_H = 480
-
-# 結果写真ウィンドウ表示サイズ。小さめにしてモニターからはみ出さないようにする。
-PHOTO_DISPLAY_MAX_W = 1200
-PHOTO_DISPLAY_MAX_H = 650
-COMPARISON_PANEL_W = 560
-COMPARISON_PANEL_H = 500
-
 # カメラ設定
 CAPTURE_W = 640
 CAPTURE_H = 480
@@ -151,17 +137,17 @@ A_BACKEND = "DEFAULT"
 B_BACKEND = "DSHOW"
 
 # 判定設定
-CLEAR_DISTANCE_MM = 400.0
+CLEAR_DISTANCE_MM = 390.0
 HOLD_TIME_SEC = 2.0
 
 # CLEAR_DISTANCE_MM=390なら、1170mm以内から赤くなり始める
-FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 1.2
+FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 3.0
 
 # 色を見失った時、最後の判定情報を使い続ける最大時間
 LOST_HOLD_SEC = 0.7
 
 # 色領域の最小面積
-MIN_AREA = 10
+MIN_AREA = 40
 
 kernel = np.ones((5, 5), np.uint8)
 
@@ -169,24 +155,20 @@ kernel = np.ones((5, 5), np.uint8)
 # HSV設定
 # 照明や素材に合わせて調整する
 # =========================
-
-# 赤：少し緩める。暗め・薄めの赤も拾いやすくする
-LOWER_RED_1 = np.array([0, 160, 80])
+LOWER_RED_1 = np.array([0, 120, 50])
 UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 160, 80])
+LOWER_RED_2 = np.array([170, 120, 50])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-# 黄色：少し緩める。現在より暗い黄色・薄い黄色も拾う
-LOWER_YELLOW = np.array([18, 80, 70])
-UPPER_YELLOW = np.array([40, 255, 255])
+LOWER_YELLOW = np.array([20, 80, 80])
+UPPER_YELLOW = np.array([35, 255, 255])
 
-# 青：少し緩める。影だけ拾う場合はV下限を下げすぎない
-LOWER_BLUE = np.array([90, 55, 45])
+LOWER_BLUE = np.array([95, 150, 50])
 UPPER_BLUE = np.array([130, 255, 255])
 
-# 緑：少し緩める。濃い緑・暗い緑を拾いやすくする
-LOWER_GREEN = np.array([30, 25, 10])
-UPPER_GREEN = np.array([105, 255, 245])
+LOWER_GREEN = np.array([40, 60, 50])
+UPPER_GREEN = np.array([85, 255, 255])
+
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 COLOR_CONFIGS = {
@@ -300,167 +282,6 @@ def format_vec(v):
     if v is None:
         return "---"
     return f"X:{v[0]:.1f} Y:{v[1]:.1f} Z:{v[2]:.1f}"
-
-
-def get_timestamp_text():
-    return time.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def get_timestamp_for_filename():
-    return time.strftime("%Y%m%d_%H%M%S")
-
-
-def create_photo_session_dir():
-    session_dir = os.path.join(PHOTO_BASE_DIR, "session_" + get_timestamp_for_filename())
-    os.makedirs(session_dir, exist_ok=True)
-    return session_dir
-
-
-def resize_with_aspect_padding(image, target_w, target_h, bg_color=(20, 20, 20)):
-    """
-    画像の縦横比を保ったまま target_w x target_h に収める。
-    余った部分は bg_color で塗りつぶす。
-    """
-    if image is None:
-        return None
-
-    h, w = image.shape[:2]
-    if w <= 0 or h <= 0:
-        return None
-
-    scale = min(target_w / w, target_h / h)
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-
-    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    canvas = np.full((target_h, target_w, 3), bg_color, dtype=np.uint8)
-
-    x0 = (target_w - new_w) // 2
-    y0 = (target_h - new_h) // 2
-    canvas[y0:y0 + new_h, x0:x0 + new_w] = resized
-
-    return canvas
-
-
-def make_photo_from_a_set(set_a, title, subtitle=""):
-    """
-    AセットのA Cam0画像だけを使い、タイトル付きの保存用写真を作る。
-    A Cam1は3D計測には使うが、出題時/クリア時の記録写真には使わない。
-    """
-    if set_a.out0 is None:
-        return None
-
-    image = maybe_flip_for_display(set_a.out0.copy())
-    image = cv2.resize(image, (PHOTO_RESULT_W, PHOTO_RESULT_H))
-
-    header_h = 90
-    photo = np.full((image.shape[0] + header_h, image.shape[1], 3), 25, dtype=np.uint8)
-    photo[header_h:, :] = image
-
-    cv2.putText(
-        photo,
-        title,
-        (25, 38),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1.0,
-        (255, 255, 255),
-        2,
-    )
-    cv2.putText(
-        photo,
-        f"{subtitle}  {get_timestamp_text()}",
-        (25, 70),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (200, 200, 200),
-        1,
-    )
-
-    cv2.putText(photo, "A Cam0", (25, header_h + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-
-    return photo
-
-
-def save_photo_image(image, session_dir, filename):
-    if image is None or session_dir is None:
-        return None
-
-    os.makedirs(session_dir, exist_ok=True)
-    path = os.path.join(session_dir, filename)
-    ok = cv2.imwrite(path, image)
-    if ok:
-        print(f"[PHOTO SAVED] {path}")
-        return path
-
-    print(f"[PHOTO SAVE FAILED] {path}")
-    return None
-
-
-def make_comparison_photo(challenge_image, clear_image, clear_time=None):
-    """出題時写真とクリア時写真を左右に並べた比較画像を作る。
-
-    A Cam0写真だけを使う。
-    縦横比を保ったまま、比較用の小さめパネルに収めることで、
-    画像の横伸びとモニターからのはみ出しを防ぐ。
-    """
-    if challenge_image is None or clear_image is None:
-        return None
-
-    single_w = COMPARISON_PANEL_W
-    single_h = COMPARISON_PANEL_H
-
-    left = resize_with_aspect_padding(challenge_image, single_w, single_h)
-    right = resize_with_aspect_padding(clear_image, single_w, single_h)
-
-    header_h = 75
-    label_h = 38
-    canvas_h = header_h + label_h + single_h
-    canvas_w = single_w * 2
-    canvas = np.full((canvas_h, canvas_w, 3), 20, dtype=np.uint8)
-
-    title = "PoseRing Result"
-    if clear_time is not None:
-        title += f"  /  Clear Time: {clear_time:.2f} sec"
-
-    cv2.putText(canvas, title, (25, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-    cv2.putText(canvas, get_timestamp_text(), (25, 63), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (190, 190, 190), 1)
-
-    cv2.putText(canvas, "CHALLENGE / TARGET POSE", (25, header_h + 27), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 255, 255), 2)
-    cv2.putText(canvas, "CLEAR POSE", (single_w + 25, header_h + 27), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 255, 0), 2)
-
-    y0 = header_h + label_h
-    canvas[y0:y0 + single_h, 0:single_w] = left
-    canvas[y0:y0 + single_h, single_w:single_w * 2] = right
-
-    cv2.line(canvas, (single_w, header_h), (single_w, canvas_h - 1), (120, 120, 120), 2)
-    return canvas
-
-
-def show_photo_window_safely(image):
-    """結果写真をモニターに収まるサイズで表示する。"""
-    if image is None:
-        return
-
-    h, w = image.shape[:2]
-    scale = min(PHOTO_DISPLAY_MAX_W / w, PHOTO_DISPLAY_MAX_H / h, 1.0)
-
-    if scale < 1.0:
-        display_image = cv2.resize(
-            image,
-            (int(w * scale), int(h * scale)),
-            interpolation=cv2.INTER_AREA,
-        )
-    else:
-        display_image = image
-
-    cv2.imshow(PHOTO_WINDOW_NAME, display_image)
-
-
-def close_photo_window_safely():
-    try:
-        cv2.destroyWindow(PHOTO_WINDOW_NAME)
-    except Exception:
-        pass
 
 
 def detect_color_center(source_frame, draw_frame, color_name):
@@ -1257,9 +1078,8 @@ def main():
     print("PoseRing 2PC Main / A Camera + Remote B UDP")
     print("Aセット優先、Aで見失った色だけBセットで補助")
     print("q / Esc : 終了")
-    print("s       : A/B両方の現在4色座標を目標として保存 + 出題時写真保存（まだゲーム開始しない）")
+    print("s       : A/B両方の現在4色座標を目標として保存（まだゲーム開始しない）")
     print("g       : ゲーム開始 / クリア時間計測スタート")
-    print("clear  : ALL CLEAR時にクリア時写真保存 + 比較画像表示")
     print("c       : 目標とCLEAR状態をリセット")
     print("r       : 目標・最後に使った判定情報・CLEAR状態をすべてリセット")
     print("0/1/2   : BLEテスト")
@@ -1316,15 +1136,6 @@ def main():
     # 対象色が最後にLIVE検出された時刻を保持し、短時間の遮蔽では消灯しない。
     last_target_live_time = None
     target_stage_lost_age = None
-
-    # 写真保存用
-    photo_session_dir = None
-    challenge_photo_image = None
-    clear_photo_image = None
-    result_display_image = None
-    challenge_photo_path = None
-    clear_photo_path = None
-    comparison_photo_path = None
 
     try:
         while True:
@@ -1445,48 +1256,11 @@ def main():
                         game_active = False
                         clear_time = time.time() - game_start_time if game_start_time is not None else None
 
-                        if ENABLE_PHOTO_CAPTURE:
-                            if photo_session_dir is None:
-                                photo_session_dir = create_photo_session_dir()
-
-                            clear_photo_image = make_photo_from_a_set(
-                                set_a,
-                                "CLEAR POSE",
-                                f"Clear Time: {clear_time:.2f} sec" if clear_time is not None else "Clear Time: ---",
-                            )
-                            clear_photo_path = save_photo_image(
-                                clear_photo_image,
-                                photo_session_dir,
-                                "clear_pose_" + get_timestamp_for_filename() + ".jpg",
-                            )
-
-                            result_display_image = make_comparison_photo(
-                                challenge_photo_image,
-                                clear_photo_image,
-                                clear_time,
-                            )
-                            comparison_photo_path = save_photo_image(
-                                result_display_image,
-                                photo_session_dir,
-                                "comparison_" + get_timestamp_for_filename() + ".jpg",
-                            )
-
-                            if result_display_image is not None:
-                                show_photo_window_safely(result_display_image)
-
                         if not clear_logged:
-                            print("======================================")
                             if clear_time is not None:
+                                print("======================================")
                                 print(f"ALL CLEAR! clear_time={clear_time:.2f} sec")
-                            else:
-                                print("ALL CLEAR!")
-                            if challenge_photo_path is not None:
-                                print("出題時写真:", challenge_photo_path)
-                            if clear_photo_path is not None:
-                                print("クリア時写真:", clear_photo_path)
-                            if comparison_photo_path is not None:
-                                print("比較画像:", comparison_photo_path)
-                            print("======================================")
+                                print("======================================")
                             clear_logged = True
 
                 else:
@@ -1726,9 +1500,6 @@ def main():
             display = np.hstack((cameras_left, info))
             cv2.imshow("PoseRing 2PC Main", display)
 
-            if result_display_image is not None and overall_clear:
-                show_photo_window_safely(result_display_image)
-
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord("q") or key == 27:
@@ -1763,11 +1534,6 @@ def main():
                     game_start_time = time.time()
                     clear_time = None
                     clear_logged = False
-                    clear_photo_image = None
-                    result_display_image = None
-                    clear_photo_path = None
-                    comparison_photo_path = None
-                    close_photo_window_safely()
 
                     print("======================================")
                     print("ゲーム開始。クリア時間計測を開始しました。")
@@ -1804,34 +1570,10 @@ def main():
                 clear_time = None
                 clear_logged = False
 
-                photo_session_dir = None
-                challenge_photo_image = None
-                clear_photo_image = None
-                result_display_image = None
-                challenge_photo_path = None
-                clear_photo_path = None
-                comparison_photo_path = None
-                close_photo_window_safely()
-
-                if ENABLE_PHOTO_CAPTURE:
-                    photo_session_dir = create_photo_session_dir()
-                    challenge_photo_image = make_photo_from_a_set(
-                        set_a,
-                        "CHALLENGE / TARGET POSE",
-                        "Saved when s key was pressed",
-                    )
-                    challenge_photo_path = save_photo_image(
-                        challenge_photo_image,
-                        photo_session_dir,
-                        "challenge_pose_" + get_timestamp_for_filename() + ".jpg",
-                    )
-
                 print("======================================")
                 print("A/Bの目標座標を保存しました。まだゲームは開始していません。")
                 print("A saved:", saved_a, "| A missing:", missing_a)
                 print("B saved:", saved_b, "| B missing:", missing_b)
-                if challenge_photo_path is not None:
-                    print("出題時写真:", challenge_photo_path)
 
                 if missing_both:
                     print("注意: A/Bどちらにも目標がない色があります:", missing_both)
@@ -1865,14 +1607,6 @@ def main():
                 game_start_time = None
                 clear_time = None
                 clear_logged = False
-                photo_session_dir = None
-                challenge_photo_image = None
-                clear_photo_image = None
-                result_display_image = None
-                challenge_photo_path = None
-                clear_photo_path = None
-                comparison_photo_path = None
-                close_photo_window_safely()
 
                 print("目標座標・ゲーム開始状態・CLEAR状態をリセットしました。")
 
@@ -1890,14 +1624,6 @@ def main():
                 game_start_time = None
                 clear_time = None
                 clear_logged = False
-                photo_session_dir = None
-                challenge_photo_image = None
-                clear_photo_image = None
-                result_display_image = None
-                challenge_photo_path = None
-                clear_photo_path = None
-                comparison_photo_path = None
-                close_photo_window_safely()
 
                 print("目標座標・最後に使った判定情報・ゲーム開始状態・CLEAR状態をすべてリセットしました。")
 
