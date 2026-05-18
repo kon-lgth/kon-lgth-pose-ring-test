@@ -1239,10 +1239,10 @@ function showResultOverlay(result, snapshots) {
   // Build snapshot images
   row.innerHTML = '';
   const labels = {
-    setup_photo: 'TARGET CAM 0',
-    setup_photo_cam1: 'TARGET CAM 1',
-    cam0: '📷 CAM 0 — FRONT',
-    cam1: '📷 CAM 1 — SIDE',
+    setup_photo: 'SETUP POSE — CAM 0',
+    setup_photo_cam1: 'SETUP POSE — CAM 1',
+    cam0: 'CLEARED POSE — CAM 0',
+    cam1: 'CLEARED POSE — CAM 1',
   };
   if (snapshots?.setup_photos?.cam0) snapshots.setup_photo = snapshots.setup_photos.cam0;
   if (snapshots?.setup_photos?.cam1) snapshots.setup_photo_cam1 = snapshots.setup_photos.cam1;
@@ -1375,6 +1375,10 @@ function applyState(state) {
   )
     ? (_lobbySetup.first_player || activePlayers[0] || null)
     : (state.current_player || activePlayers[0] || null);
+
+  if (!document.body.classList.contains('vs-active')) {
+    sound.setMusicMode(PLAYER_SCREEN_MODE === 'single' && gs === 'PLAYING' ? 'guess' : 'menu');
+  }
 
   // ── Proximity rings + sonar sounds ──
   if (gs === 'PLAYING') {

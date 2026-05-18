@@ -282,6 +282,7 @@ class GameEngine:
             "clear_logged": False,
             "current_pose_name": None,
             "current_pose_difficulty": self._settings.get("difficulty", "medium"),
+            "current_pose_photos": {},
             "target_slots": [],
         }
 
@@ -477,6 +478,7 @@ class GameEngine:
             ctx["targets_set"] = bool(target_slots)
             ctx["current_pose_name"] = pose.get("name", "Saved pose")
             ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
+            ctx["current_pose_photos"] = pose.get("setup_photos", {}) or {}
             ctx["message"] = (
                 f"Loaded pose: {ctx['current_pose_name']}"
                 if target_slots
@@ -506,6 +508,7 @@ class GameEngine:
         ctx["targets_set"] = bool(target_slots)
         ctx["current_pose_name"] = pose.get("name", "Saved pose")
         ctx["current_pose_difficulty"] = difficulty
+        ctx["current_pose_photos"] = pose.get("setup_photos", {}) or {}
         ctx["game_state"] = GameState.IDLE
         ctx["pose_result"] = None
         ctx["all_inside_t"] = None
@@ -696,6 +699,7 @@ class GameEngine:
                     current_player = self._current_player(ctx)
                     ctx["pose"] += 1
                     ctx["pose_result"] = "cleared"
+                    ctx["elapsed_time"] = elapsed
                     ctx["poses_cleared_total"] += 1
                     ctx["game_state"] = GameState.POSE_CLEAR
                     ctx["message"] = "POSE CLEAR. Tap NEXT when ready."
@@ -720,6 +724,7 @@ class GameEngine:
             ):
                 ctx["pose"] += 1
                 ctx["pose_result"] = "timeout"
+                ctx["elapsed_time"] = elapsed
                 ctx["game_state"] = GameState.TIME_UP
                 ctx["message"] = "TIME'S UP. Tap NEXT when ready."
                 self._queue_snapshot(ctx)
@@ -741,6 +746,8 @@ class GameEngine:
             "result": ctx.get("pose_result", "unknown"),
             "round": ctx["round"],
             "pose": ctx["pose"],
+            "elapsed_time": ctx.get("elapsed_time"),
+            "setup_photos": ctx.get("current_pose_photos", {}) or {},
         }
         with self._lock:
             self._snapshot_event = event

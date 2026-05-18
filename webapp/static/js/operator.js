@@ -113,6 +113,25 @@ const operatorSound = {
     this.tone(523, 0.09, 0.1, 'triangle');
     setTimeout(() => this.tone(784, 0.12, 0.08, 'triangle'), 70);
   },
+  cameraShutter() {
+    if (!this.effectsAllowed()) return;
+    const ctx = this.context();
+    const t = ctx.currentTime;
+    const bufferSize = Math.floor(ctx.sampleRate * 0.09);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+    const noise = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    noise.buffer = buffer;
+    gain.gain.setValueAtTime(0.35 * audioSettings.effects_volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    noise.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start(t);
+  },
 };
 
 function applyLobbySetup(setup) {
@@ -120,17 +139,6 @@ function applyLobbySetup(setup) {
   if (Array.isArray(setup.players) && setup.players.length) {
     const playersInput = document.getElementById('s-players');
     if (playersInput) playersInput.value = setup.players.join(', ');
-  }
-  if (setup.difficulty) {
-    const diff = document.getElementById('s-difficulty');
-    if (diff) diff.value = setup.difficulty;
-  }
-  if (setup.clear_dist_mm) {
-    const radius = document.getElementById('s-clear-radius');
-    if (radius) radius.value = String(Math.round(Number(setup.clear_dist_mm)));
-  } else {
-    clearRadiusTouched = false;
-    applyDifficultyRadius(true);
   }
   const type = setup.type ? String(setup.type).toUpperCase() : 'MULTIPLAYER';
   const first = setup.first_player ? ` | First: ${setup.first_player}` : '';
@@ -324,7 +332,7 @@ window.openPoseModal = function () {
   if (cam0) cam0.removeAttribute('src');
   if (cam1) cam1.removeAttribute('src');
   setPoseCaptureStage('edit');
-  if (confirm) confirm.textContent = 'Check both front cameras, then confirm. A 3, 2, 1 countdown will capture the pose coordinates and photos.';
+  if (confirm) confirm.textContent = 'Check both front cameras, then confirm. A 5, 4, 3, 2, 1 countdown will capture the pose coordinates and photos.';
   if (modal) modal.classList.add('show');
   operatorSound.modalOpen();
 };
@@ -366,7 +374,7 @@ async function runPoseCaptureCountdown() {
   const number = document.getElementById('poseCaptureNumber');
   if (!overlay) return;
   overlay.classList.add('show');
-  for (const n of [3, 2, 1]) {
+  for (const n of [5, 4, 3, 2, 1]) {
     if (number) {
       number.textContent = String(n);
       number.className = 'countdown-number';
@@ -376,6 +384,7 @@ async function runPoseCaptureCountdown() {
     operatorSound.beep(n);
     await wait(850);
   }
+  operatorSound.cameraShutter();
   overlay.classList.remove('show');
 }
 
@@ -383,7 +392,7 @@ async function capturePoseDraft() {
   const inputs = poseCaptureInputs();
   if (!inputs || poseCaptureBusy) return null;
   poseCaptureBusy = true;
-  setPoseCaptureStage('capture', 'Hold still. Capturing pose in 3, 2, 1...');
+  setPoseCaptureStage('capture', 'Hold still. Capturing pose in 5, 4, 3, 2, 1...');
   await runPoseCaptureCountdown();
 
   const res = await fetch('/api/poses/capture', {
