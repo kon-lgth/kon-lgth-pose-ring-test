@@ -1238,6 +1238,7 @@ function showResultOverlay(result, snapshots) {
 
   // Build snapshot images
   row.innerHTML = '';
+  row.className = 'snapshot-row';
   const labels = {
     setup_photo: 'SETUP POSE — CAM 0',
     setup_photo_cam1: 'SETUP POSE — CAM 1',
@@ -1246,15 +1247,7 @@ function showResultOverlay(result, snapshots) {
   };
   if (snapshots?.setup_photos?.cam0) snapshots.setup_photo = snapshots.setup_photos.cam0;
   if (snapshots?.setup_photos?.cam1) snapshots.setup_photo_cam1 = snapshots.setup_photos.cam1;
-  const keys = snapshots && (snapshots.setup_photo || snapshots.setup_photo_cam1)
-    ? [
-        ...(snapshots.setup_photo ? ['setup_photo'] : []),
-        ...(snapshots.setup_photo_cam1 ? ['setup_photo_cam1'] : []),
-        'cam0',
-        'cam1',
-      ]
-    : ['cam0', 'cam1'];
-  keys.forEach(key => {
+  const makeFrame = (key) => {
     const frame = document.createElement('div');
     frame.className = 'snapshot-frame';
     if (snapshots && snapshots[key]) {
@@ -1269,8 +1262,33 @@ function showResultOverlay(result, snapshots) {
         </div>
       `;
     }
-    row.appendChild(frame);
-  });
+    return frame;
+  };
+
+  if (PLAYER_SCREEN_MODE === 'single' && result === 'cleared' && (snapshots?.setup_photo || snapshots?.setup_photo_cam1)) {
+    row.classList.add('single-compare');
+    const columns = [
+      [getPlayerText('poseByCreator'), ['setup_photo', 'setup_photo_cam1']],
+      [getPlayerText('yourPose'), ['cam0', 'cam1']],
+    ];
+    columns.forEach(([columnTitle, keys]) => {
+      const column = document.createElement('div');
+      column.className = 'snapshot-column';
+      column.innerHTML = `<div class="snapshot-column-title">${columnTitle}</div>`;
+      keys.forEach(key => column.appendChild(makeFrame(key)));
+      row.appendChild(column);
+    });
+  } else {
+    const keys = snapshots && (snapshots.setup_photo || snapshots.setup_photo_cam1)
+      ? [
+          ...(snapshots.setup_photo ? ['setup_photo'] : []),
+          ...(snapshots.setup_photo_cam1 ? ['setup_photo_cam1'] : []),
+          'cam0',
+          'cam1',
+        ]
+      : ['cam0', 'cam1'];
+    keys.forEach(key => row.appendChild(makeFrame(key)));
+  }
 
   btn.textContent = PLAYER_SCREEN_MODE === 'single' && result === 'cleared'
     ? '▶ PLAY AGAIN'

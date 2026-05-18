@@ -330,6 +330,28 @@
     .snapshot-row {
       display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
     }
+    .snapshot-row.single-compare {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+      align-items: start;
+      width: min(900px, 92vw);
+    }
+    .snapshot-column {
+      display: grid;
+      gap: 0.75rem;
+      justify-items: center;
+    }
+    .snapshot-column-title {
+      color: #fff;
+      font-size: clamp(0.62rem, 1.1vw, 0.9rem);
+      letter-spacing: 2px;
+      text-align: center;
+    }
+    html[lang="ja"] .snapshot-column-title {
+      font-family: var(--font-ja);
+      font-size: clamp(1rem, 1.6vw, 1.35rem);
+      letter-spacing: 0;
+    }
     .snapshot-frame {
       border: 3px solid #312e81;
       background: #0f0e2a;
@@ -1063,6 +1085,8 @@
         vsCaptureMissingText: 'These colors were not detected: {colors}. Make sure every device is visible, then try again.',
         vsCaptureGenericText: 'The pose could not be saved because not enough target points were detected. Check the devices and try again.',
         vsTryAgain: 'TRY AGAIN',
+        poseByCreator: 'Pose by the Creator',
+        yourPose: 'Your Pose',
       },
       ja: {
         audioTitle: 'プレイヤー音声',
@@ -1109,6 +1133,8 @@
         vsCaptureMissingText: '検出できない色: {colors}。すべてのデバイスがカメラに見えるようにして、もう一度試してください。',
         vsCaptureGenericText: '検出されたポイントが足りないため、ポーズを保存できませんでした。デバイスを確認してもう一度試してください。',
         vsTryAgain: 'もう一度',
+        poseByCreator: '作ったポーズ',
+        yourPose: 'あなたのポーズ',
       },
     };
     (function applyPlayerLanguage() {
