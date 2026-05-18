@@ -75,7 +75,7 @@ CONFIG = {
     "players":        ["Player 1", "Player 2"],
     "difficulty":     "medium",
     "poses_per_round": 3,
-    "num_rounds":      3,
+    "num_rounds":      1,
 
     # XIAO nRF52840 / NeoPixel / DFPlayer firmware.
     # Uses BleFeedbackController from redlight_ring_2pc_main.py.
@@ -121,6 +121,8 @@ PREPARED_GAME = {
     "players": [],
     "first_player": None,
     "player_colors": {},
+    "difficulty": "medium",
+    "clear_dist_mm": None,
     "status": "idle",
 }
 
@@ -288,6 +290,27 @@ def _emit_vs(extra=None):
     socketio.emit("vs_state", _public_vs_state(extra))
 
 
+def _requested_difficulty(data):
+    difficulty = str((data or {}).get("difficulty") or PREPARED_GAME.get("difficulty") or CONFIG["difficulty"]).strip().lower()
+    if difficulty == "high":
+        difficulty = "hard"
+    return difficulty if difficulty in DIFFICULTIES else CONFIG["difficulty"]
+
+
+def _requested_clear_dist(data, difficulty=None):
+    raw = (data or {}).get("clear_dist_mm")
+    if raw in (None, ""):
+        raw = PREPARED_GAME.get("clear_dist_mm")
+    if raw in (None, ""):
+        difficulty = difficulty or _requested_difficulty(data)
+        return float(DIFFICULTIES[difficulty]["clear_dist_mm"])
+    try:
+        return max(50.0, min(1500.0, float(raw)))
+    except (TypeError, ValueError):
+        difficulty = difficulty or _requested_difficulty(data)
+        return float(DIFFICULTIES[difficulty]["clear_dist_mm"])
+
+
 def _start_vs_setup(turn_index=None):
     if turn_index is not None:
         VS_SESSION["turn_index"] = int(turn_index)
@@ -345,11 +368,15 @@ def _begin_vs_challenge_after_ready():
 
 def _vs_engine_settings(players):
     mode_type = VS_SESSION.get("type") or PREPARED_GAME.get("type") or "versus"
+    difficulty = VS_SESSION.get("difficulty") or PREPARED_GAME.get("difficulty") or "medium"
+    clear_dist_mm = VS_SESSION.get("clear_dist_mm")
+    if clear_dist_mm in (None, ""):
+        clear_dist_mm = VS_CLEAR_DIST_MM.get(mode_type, VS_CLEAR_DIST_MM["versus"])
     return {
         "players": players,
         "player_colors": VS_SESSION.get("player_colors", {}),
-        "difficulty": "medium",
-        "clear_dist_mm": VS_CLEAR_DIST_MM.get(mode_type, VS_CLEAR_DIST_MM["versus"]),
+        "difficulty": difficulty,
+        "clear_dist_mm": clear_dist_mm,
         "poses_per_round": VS_POSES_PER_TURN,
         "num_rounds": 1,
         "a_cam0_index": CONFIG["a_cam0_index"],
@@ -690,12 +717,22 @@ def on_prepare_game(data):
     if first_player not in players:
         first_player = players[0]
 
+    difficulty = _requested_difficulty(data)
+    raw_clear_dist = (data or {}).get("clear_dist_mm")
+    clear_dist_mm = (
+        _requested_clear_dist({"clear_dist_mm": raw_clear_dist}, difficulty)
+        if raw_clear_dist not in (None, "")
+        else float(DIFFICULTIES[difficulty]["clear_dist_mm"])
+    )
+
     PREPARED_GAME.update({
         "mode": (data or {}).get("mode", "multiplayer"),
         "type": (data or {}).get("type", "coop"),
         "players": players,
         "first_player": first_player,
         "player_colors": (data or {}).get("player_colors", {}),
+        "difficulty": difficulty,
+        "clear_dist_mm": clear_dist_mm,
         "status": "ready_for_operator",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)
@@ -707,13 +744,26 @@ def on_start_game(data):
     data: {players, difficulty, poses_per_round, num_rounds}
     """
     data = data or {}
+    difficulty = _requested_difficulty(data)
+    clear_dist_mm = _requested_clear_dist(data, difficulty)
+    PREPARED_GAME.update({
+        "difficulty": difficulty,
+        "clear_dist_mm": clear_dist_mm,
+    })
     if PREPARED_GAME.get("type") in {"versus", "team_battle"}:
+        if VS_SESSION.get("active"):
+            VS_SESSION.update({
+                "difficulty": difficulty,
+                "clear_dist_mm": clear_dist_mm,
+            })
         if not VS_SESSION.get("active") or VS_SESSION.get("phase") in {"idle"}:
             VS_SESSION.update({
                 "session_id": int(VS_SESSION.get("session_id", 0)) + 1,
                 "type": PREPARED_GAME.get("type", "versus"),
                 "players": PREPARED_GAME.get("players", ["Player 1", "Player 2"]),
                 "player_colors": PREPARED_GAME.get("player_colors", {}),
+                "difficulty": difficulty,
+                "clear_dist_mm": clear_dist_mm,
                 "turn_index": 0,
                 "turns": [],
             })
@@ -733,9 +783,10 @@ def on_start_game(data):
     settings = {
         "players":         players,
         "player_colors":   PREPARED_GAME.get("player_colors", {}),
-        "difficulty":      data.get("difficulty", "medium"),
+        "difficulty":      difficulty,
+        "clear_dist_mm":   clear_dist_mm,
         "poses_per_round": CONFIG["poses_per_round"],
-        "num_rounds":      int(data.get("num_rounds", 3)),
+        "num_rounds":      CONFIG["num_rounds"],
         "time_per_pose":   data.get("time_per_pose"),
         "no_time_limit":   bool(data.get("no_time_limit")),
         "a_cam0_index":    CONFIG["a_cam0_index"],
@@ -758,6 +809,8 @@ def on_start_game(data):
     engine.send_command("start_game", settings)
     PREPARED_GAME.update({
         "players": players,
+        "difficulty": difficulty,
+        "clear_dist_mm": clear_dist_mm,
         "status": "started",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)
@@ -793,6 +846,8 @@ def on_reset():
         "players": [],
         "first_player": None,
         "player_colors": {},
+        "difficulty": CONFIG["difficulty"],
+        "clear_dist_mm": None,
         "status": "idle",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)

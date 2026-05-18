@@ -12,6 +12,7 @@
 
 const COLOR_ORDER = ['RED', 'YELLOW', 'BLUE', 'GREEN'];
 const COLOR_NAMES = { RED: 'R.Arm', YELLOW: 'L.Arm', BLUE: 'R.Leg', GREEN: 'L.Leg' };
+const DIFFICULTY_RADIUS_MM = { easy: 500, medium: 390, hard: 250 };
 
 /* ── Socket.IO ── */
 const socket = io();
@@ -35,6 +36,7 @@ let latestCameraError = '';
 const failedFeeds = new Set();
 let latestState = {};
 let pendingStartPayload = null;
+let clearRadiusTouched = false;
 
 const operatorSound = {
   ctx: null,
@@ -62,7 +64,30 @@ const operatorSound = {
     osc.stop(ctx.currentTime + duration + 0.02);
   },
   beep(n) {
-    this.tone(n > 0 ? 440 + (3 - n) * 90 : 880, 0.22, 0.2, 'square');
+    this.playCountdownBeep(n);
+  },
+  playCountdownBeep(n) {
+    if (!this.effectsAllowed()) return;
+    const ctx = this.context();
+    const t = ctx.currentTime;
+    const play = (freq, when, duration, volume) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, when);
+      gain.gain.setValueAtTime(volume * audioSettings.effects_volume, when);
+      gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(when);
+      osc.stop(when + duration + 0.02);
+    };
+    play(n > 0 ? 440 : 880, t, n > 0 ? 0.12 : 0.05, n > 0 ? 0.35 : 0.55);
+    if (n === 0) {
+      [880, 1047, 1319].forEach((freq, i) => {
+        play(freq, t + 0.06 + i * 0.06, 0.12, 0.35);
+      });
+    }
   },
   click() {
     if (!this.effectsAllowed()) return;
@@ -96,6 +121,17 @@ function applyLobbySetup(setup) {
     const playersInput = document.getElementById('s-players');
     if (playersInput) playersInput.value = setup.players.join(', ');
   }
+  if (setup.difficulty) {
+    const diff = document.getElementById('s-difficulty');
+    if (diff) diff.value = setup.difficulty;
+  }
+  if (setup.clear_dist_mm) {
+    const radius = document.getElementById('s-clear-radius');
+    if (radius) radius.value = String(Math.round(Number(setup.clear_dist_mm)));
+  } else {
+    clearRadiusTouched = false;
+    applyDifficultyRadius(true);
+  }
   const type = setup.type ? String(setup.type).toUpperCase() : 'MULTIPLAYER';
   const first = setup.first_player ? ` | First: ${setup.first_player}` : '';
   flash(`${type} ready on player screen${first}. Press START / RESUME when ready.`, 'green');
@@ -110,6 +146,7 @@ window.startGame = function () {
   requestStartGame({
     players:         players.length ? players : ['Player 1'],
     difficulty:      document.getElementById('s-difficulty').value,
+    clear_dist_mm:   parseFloat(document.getElementById('s-clear-radius')?.value || ''),
     poses_per_round: parseInt(document.getElementById('s-poses').value),
     num_rounds:      parseInt(document.getElementById('s-rounds').value),
     no_time_limit:   noTimeLimit,
@@ -120,6 +157,15 @@ window.startGame = function () {
 function emitStartGame(payload) {
   socket.emit('cmd_start_game', payload);
   flash('Start requested', 'green');
+}
+
+function applyDifficultyRadius(force = false) {
+  const diff = document.getElementById('s-difficulty')?.value || 'medium';
+  const radius = document.getElementById('s-clear-radius');
+  if (!radius) return;
+  if (force || !clearRadiusTouched) {
+    radius.value = String(DIFFICULTY_RADIUS_MM[diff] || DIFFICULTY_RADIUS_MM.medium);
+  }
 }
 
 function cameraIssuesForStart() {
@@ -260,6 +306,8 @@ function updatePoseMeta() {
   meta.textContent = `${difficultyLabel(pose.difficulty)} | ${pointCount} free target point${pointCount === 1 ? '' : 's'} | ${counts || 'no coordinates'}`;
   const diff = document.getElementById('s-difficulty');
   if (diff) diff.value = pose.difficulty || 'medium';
+  clearRadiusTouched = false;
+  applyDifficultyRadius(true);
 }
 
 window.openPoseModal = function () {
@@ -616,6 +664,7 @@ function updateOpCountdown(gs, countdown) {
       void num.offsetWidth;
       num.className   = 'op-cd-number';
       sub.textContent = 'GET READY!';
+      operatorSound.playCountdownBeep(n > 0 ? n : 0);
       _opPrevCountdown = n;
     }
   } else if (gs === 'PLAYING' && _opPrevCountdown !== null && _opPrevCountdown !== -1) {
@@ -626,6 +675,7 @@ function updateOpCountdown(gs, countdown) {
     void num.offsetWidth;
     num.className    = 'op-cd-number op-cd-go';
     sub.textContent  = '';
+    operatorSound.playCountdownBeep(0);
     _opPrevCountdown = -1;
     setTimeout(() => { ov.classList.remove('show'); _opPrevCountdown = null; }, 700);
   } else if (gs !== 'PLAYING' || _opPrevCountdown === null) {
@@ -694,6 +744,20 @@ function bindTimeControls() {
   sync();
 }
 
+function bindDifficultyControls() {
+  const diff = document.getElementById('s-difficulty');
+  const radius = document.getElementById('s-clear-radius');
+  if (!diff || !radius) return;
+  diff.addEventListener('change', () => {
+    clearRadiusTouched = false;
+    applyDifficultyRadius(true);
+  });
+  radius.addEventListener('input', () => {
+    clearRadiusTouched = true;
+  });
+  applyDifficultyRadius(true);
+}
+
 function bindCameraFeedWarnings() {
   ['feed0', 'feed1', 'feed2', 'feed3'].forEach((id) => {
     const img = document.getElementById(id);
@@ -745,6 +809,7 @@ pollBLE();
 buildColorStatus();
 bindAudioControls();
 bindTimeControls();
+bindDifficultyControls();
 bindCameraFeedWarnings();
 document.addEventListener('click', (event) => {
   if (event.target.closest('button')) {

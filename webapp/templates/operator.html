@@ -485,19 +485,16 @@
             </select>
           </div>
           <div class="form-row">
+            <label>CLEAR RADIUS (MM)</label>
+            <input type="number" id="s-clear-radius" min="50" max="1500" step="10" value="390"/>
+          </div>
+          <div class="form-row">
             <label>POSES / ROUND</label>
             <select id="s-poses">
               <option value="3" selected>3</option>
             </select>
           </div>
-          <div class="form-row">
-            <label>ROUNDS</label>
-            <select id="s-rounds">
-              <option value="1">1</option>
-              <option value="3" selected>3</option>
-              <option value="5">5</option>
-            </select>
-          </div>
+          <input type="hidden" id="s-rounds" value="1"/>
           <div class="form-row">
             <label>TIME LIMIT</label>
             <select id="s-time-mode">
