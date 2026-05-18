@@ -50,15 +50,24 @@ def _env_int(name, default):
     return int(raw)
 
 
+def _env_ble_mode(default="multi_distance_feedback"):
+    raw = os.getenv("POSERING_BLE_MODE", default)
+    mode = str(raw or default).strip().lower()
+    single_allowed = os.getenv("POSERING_ALLOW_SINGLE_BLE", "").strip().lower() in {"1", "true", "yes", "on"}
+    if mode == "single" and not single_allowed:
+        return default
+    return mode or default
+
+
 # ---------------------------------------------------------------------------
 # Configuration — edit here or through the web UI
 # ---------------------------------------------------------------------------
 
 CONFIG = {
     # A-set cameras on the main PC. Keep these aligned with redlight_ring_2pc_main.py.
-    "a_cam0_index": _env_int("POSERING_A_CAM0", 1),
-    "a_cam1_index": _env_int("POSERING_A_CAM1", 2),
-    "a_backend": os.getenv("POSERING_A_BACKEND", "DEFAULT"),
+    "a_cam0_index": _env_int("POSERING_A_CAM0", 0),
+    "a_cam1_index": _env_int("POSERING_A_CAM1", 1),
+    "a_backend": os.getenv("POSERING_A_BACKEND", "AUTO"),
     "a_calib_file": os.getenv("POSERING_A_CALIB", ""),
 
     # B-set is always received from the sub PC over UDP. Do not use laptop/OBS/iPhone cameras.
@@ -66,7 +75,7 @@ CONFIG = {
     "use_remote_b_set": True,
     "b_cam0_index": _env_int("POSERING_B_CAM0", 4),
     "b_cam1_index": _env_int("POSERING_B_CAM1", 5),
-    "b_backend": os.getenv("POSERING_B_BACKEND", "DSHOW"),
+    "b_backend": os.getenv("POSERING_B_BACKEND", "AUTO"),
     "b_calib_file": os.getenv("POSERING_B_CALIB", ""),
     "remote_b_udp_ip": os.getenv("POSERING_REMOTE_B_IP", "0.0.0.0"),
     "remote_b_udp_port": _env_int("POSERING_REMOTE_B_PORT", 5005),
@@ -81,7 +90,12 @@ CONFIG = {
     # XIAO nRF52840 / NeoPixel / DFPlayer firmware.
     # Uses BleFeedbackController from redlight_ring_2pc_main.py.
     "ble_enabled":     _env_bool("POSERING_BLE", True),
+    "ble_mode":        _env_ble_mode(),
     "ble_device_name": os.getenv("POSERING_BLE_DEVICE", "PoseRing_YELLOW"),
+    "ble_red_device_name": os.getenv("POSERING_BLE_RED", "PoseRing_RED"),
+    "ble_yellow_device_name": os.getenv("POSERING_BLE_YELLOW", "PoseRing_YELLOW"),
+    "ble_blue_device_name": os.getenv("POSERING_BLE_BLUE", "PoseRing_BLUE"),
+    "ble_green_device_name": os.getenv("POSERING_BLE_GREEN", "PoseRing_GREEN"),
     "ble_char_uuid":   os.getenv("POSERING_BLE_CHAR_UUID", "19B10001-E8F2-537E-4F6C-D104768A1214"),
     "feedback_target_color": os.getenv("POSERING_FEEDBACK_COLOR", "RED"),
 
@@ -443,7 +457,12 @@ def _vs_engine_settings(players):
         "remote_b_udp_ip": CONFIG["remote_b_udp_ip"],
         "remote_b_udp_port": CONFIG["remote_b_udp_port"],
         "ble_enabled": CONFIG["ble_enabled"],
+        "ble_mode": CONFIG["ble_mode"],
         "ble_device_name": CONFIG["ble_device_name"],
+        "ble_red_device_name": CONFIG["ble_red_device_name"],
+        "ble_yellow_device_name": CONFIG["ble_yellow_device_name"],
+        "ble_blue_device_name": CONFIG["ble_blue_device_name"],
+        "ble_green_device_name": CONFIG["ble_green_device_name"],
         "ble_char_uuid": CONFIG["ble_char_uuid"],
         "feedback_target_color": CONFIG["feedback_target_color"],
         "vs_no_timeout": True,
@@ -881,7 +900,12 @@ def on_start_game(data):
         "remote_b_udp_ip": CONFIG["remote_b_udp_ip"],
         "remote_b_udp_port": CONFIG["remote_b_udp_port"],
         "ble_enabled":     CONFIG["ble_enabled"],
+        "ble_mode":        CONFIG["ble_mode"],
         "ble_device_name": CONFIG["ble_device_name"],
+        "ble_red_device_name": CONFIG["ble_red_device_name"],
+        "ble_yellow_device_name": CONFIG["ble_yellow_device_name"],
+        "ble_blue_device_name": CONFIG["ble_blue_device_name"],
+        "ble_green_device_name": CONFIG["ble_green_device_name"],
         "ble_char_uuid":   CONFIG["ble_char_uuid"],
         "feedback_target_color": CONFIG["feedback_target_color"],
     }
@@ -1041,9 +1065,25 @@ if __name__ == "__main__":
     # Start game engine
     engine.start()
     print("[Server] Game engine started (live cameras only)")
+    print(
+        f"[Server] A cameras: {CONFIG['a_cam0_index']}, {CONFIG['a_cam1_index']} "
+        f"| backend: {CONFIG['a_backend']}"
+    )
+    print(
+        f"[Server] B set: remote UDP {CONFIG['remote_b_udp_ip']}:{CONFIG['remote_b_udp_port']}"
+        if CONFIG["use_remote_b_set"]
+        else f"[Server] B cameras: {CONFIG['b_cam0_index']}, {CONFIG['b_cam1_index']} | backend: {CONFIG['b_backend']}"
+    )
 
     if CONFIG["ble_enabled"]:
-        print(f"[Server] BLE enabled for {CONFIG['ble_device_name']}")
+        if CONFIG["ble_mode"].startswith("multi"):
+            devices = ", ".join(
+                f"{color}={CONFIG[f'ble_{color.lower()}_device_name']}"
+                for color in COLOR_ORDER
+            )
+            print(f"[Server] BLE enabled in {CONFIG['ble_mode']} mode: {devices}")
+        else:
+            print(f"[Server] BLE enabled in single mode for {CONFIG['ble_device_name']}")
     else:
         print("[Server] BLE disabled")
 

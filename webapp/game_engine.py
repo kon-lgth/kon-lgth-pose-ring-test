@@ -141,7 +141,6 @@ class GameEngine:
         self._required_target_count = max(1, min(4, int(settings.get("required_target_count", 4) or 4)))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
         self._player_colors = dict(settings.get("player_colors", {}) or {})
-        self._simulation = bool(settings.get("simulation", False))
 
     def _current_player(self, ctx):
         if not self._players:
@@ -186,7 +185,6 @@ class GameEngine:
             "targets_set": False,
             "message": message,
             "difficulty": self._settings.get("difficulty", "medium"),
-            "simulation": self._simulation,
             "countdown": None,
             "pose_result": None,
             "current_pose_name": None,
@@ -230,7 +228,6 @@ class GameEngine:
                 "targets_set": ctx.get("targets_set", False),
                 "message": ctx.get("message", ""),
                 "difficulty": self._settings.get("difficulty", "medium"),
-                "simulation": self._simulation,
                 "countdown": ctx.get("countdown_n"),
                 "pose_result": ctx.get("pose_result"),
                 "current_pose_name": ctx.get("current_pose_name"),
@@ -241,17 +238,12 @@ class GameEngine:
             }
 
     def _run(self):
-        if self._simulation:
-            self._run_simulation()
-            return
-
         try:
             self._run_live()
         except Exception as exc:
             self._live_error = str(exc)
-            print(f"[WebEngine] Live mode failed, switching to simulation: {exc}")
-            self._simulation = True
-            self._run_simulation()
+            print(f"[WebEngine] Live camera engine failed: {exc}")
+            self._run_error_state("Live camera engine failed. Check camera connections and restart the server.")
 
     def _configure_core(self):
         import redlight_ring_2pc_main as core
@@ -341,18 +333,6 @@ class GameEngine:
                         "source": "B_LIVE" if st.get("live") else "LAST_USED",
                         "y_diff": st.get("y_diff"),
                     }
-        return current
-
-    def _current_points_from_color_state(self, colors):
-        current = {color: {} for color in COLOR_ORDER}
-        for color in COLOR_ORDER:
-            point = (colors or {}).get(color, {}).get("current")
-            if point is not None:
-                current[color]["SIM"] = {
-                    "point": np.array(point, dtype=np.float64),
-                    "source": "SIM",
-                    "y_diff": (colors or {}).get(color, {}).get("y_diff"),
-                }
         return current
 
     def _target_distance_for_color(self, color_current, slot):
@@ -474,17 +454,7 @@ class GameEngine:
         sets = (pose or {}).get("sets", {})
 
         if set_a is None:
-            target_slots = self._target_slots_from_pose_sets(sets)
-            ctx["target_slots"] = target_slots
-            ctx["targets_set"] = bool(target_slots)
-            ctx["current_pose_name"] = pose.get("name", "Saved pose")
-            ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
-            ctx["current_pose_photos"] = pose.get("setup_photos", {}) or {}
-            ctx["message"] = (
-                f"Loaded pose: {ctx['current_pose_name']}"
-                if target_slots
-                else "Pose is missing target point data."
-            )
+            ctx["message"] = "Live cameras are not ready. Check connections before loading a pose."
             return
 
         allowed_sets = {"A"}
@@ -522,13 +492,7 @@ class GameEngine:
 
     def _update_current_pose_cache(self, set_a=None, set_b=None, colors=None):
         if set_a is None:
-            sets = {
-                "SIM": {
-                    color: colors[color]["current"]
-                    for color in COLOR_ORDER
-                    if colors and colors.get(color, {}).get("current") is not None
-                }
-            }
+            sets = {"A": {}, "B": {}}
         else:
             sets = {"A": {}, "B": {}}
             for color in COLOR_ORDER:
@@ -540,7 +504,7 @@ class GameEngine:
             self._current_pose = {
                 "sets": sets,
                 "captured_at": time.time(),
-                "source": "simulation" if set_a is None else "live",
+                "source": "live",
             }
 
     def _process_commands(self, commands, ctx, set_a=None, set_b=None):
@@ -573,11 +537,7 @@ class GameEngine:
 
             elif cmd == "set_targets":
                 if set_a is None:
-                    ctx["targets_set"] = True
-                    ctx["target_slots"] = []
-                    ctx["current_pose_name"] = "Manual simulation pose"
-                    ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
-                    ctx["message"] = "Simulation target pose saved. Press START."
+                    ctx["message"] = "Live cameras are not ready. Check connections before saving targets."
                     continue
 
                 saved_a, missing_a = set_a.set_targets_from_current()
@@ -805,8 +765,41 @@ class GameEngine:
             feedbacks[color] = controller
         return feedbacks
 
+    def _resolve_ble_mode(self):
+        """Default to four-ring feedback and ignore stale single-mode env vars.
+
+        Earlier demo commands sometimes exported POSERING_BLE_MODE=single.  If
+        that variable remains in the terminal profile, the app only searches for
+        the legacy PoseRing_YELLOW device.  Four devices are the normal game
+        configuration now, so single mode requires an explicit opt-in.
+        """
+        requested = os.getenv("POSERING_BLE_MODE", self._settings.get("ble_mode", "multi_distance_feedback"))
+        mode = str(requested or "multi_distance_feedback").strip().lower()
+        single_allowed = os.getenv("POSERING_ALLOW_SINGLE_BLE", "").strip().lower() in {"1", "true", "yes", "on"}
+        if mode == "single" and not single_allowed:
+            return "multi_distance_feedback"
+        return mode or "multi_distance_feedback"
+
+    def _backend_candidates(self, requested):
+        requested = str(requested or "AUTO").strip().upper()
+        if requested == "AUTO":
+            return ["DSHOW", "DEFAULT"]
+        return [requested]
+
+    def _make_stereo_set(self, core, name, calib_file, cam0_index, cam1_index, backend_mode):
+        errors = []
+        for backend in self._backend_candidates(backend_mode):
+            try:
+                return core.StereoSet(name, calib_file, cam0_index, cam1_index, backend)
+            except Exception as exc:
+                errors.append(f"{backend}: {exc}")
+        raise RuntimeError(
+            f"{name} camera set could not be opened with backends {self._backend_candidates(backend_mode)}. "
+            + " | ".join(errors)
+        )
+
     def _is_live_marker_source(self, source):
-        return source in ["A_LIVE", "B_LIVE", "SIM"]
+        return source in ["A_LIVE", "B_LIVE"]
 
     def _target_distance_for_color_ble(self, color_current, slot, *, allow_sources=None):
         """Return nearest valid target distance for BLE feedback.
@@ -817,7 +810,7 @@ class GameEngine:
         coordinates and turning off.
         """
         best = None
-        allow_sources = set(allow_sources or ["A_LIVE", "B_LIVE", "SIM"])
+        allow_sources = set(allow_sources or ["A_LIVE", "B_LIVE"])
         for set_name, target in (slot.get("points", {}) or {}).items():
             cur = (color_current or {}).get(set_name)
             if not cur:
@@ -867,7 +860,7 @@ class GameEngine:
                 detail = self._target_distance_for_color_ble(
                     (current_by_color or {}).get(color, {}),
                     slot,
-                    allow_sources=["A_LIVE", "B_LIVE", "SIM"],
+                    allow_sources=["A_LIVE", "B_LIVE"],
                 )
                 if detail is not None:
                     details[color] = detail
@@ -1103,8 +1096,8 @@ class GameEngine:
             else:
                 # core.distance_to_red_brightness() returns None when the marker
                 # is farther than FEEDBACK_MAX_DISTANCE_MM.  Passing that None to
-                # int() was crashing the live loop and switching the game into
-                # simulation mode.  Treat that case as visible-but-too-far: keep
+                # int() would crash the live loop. Treat that case as
+                # visible-but-too-far: keep
                 # the ring white instead of sending a distance brightness.
                 brightness = core.distance_to_red_brightness(distance)
                 if brightness is None:
@@ -1219,12 +1212,13 @@ class GameEngine:
         use_b_set = bool(self._settings.get("use_b_set", core.USE_B_SET))
         use_remote_b_set = bool(self._settings.get("use_remote_b_set", core.USE_REMOTE_B_SET))
 
-        set_a = core.StereoSet(
+        set_a = self._make_stereo_set(
+            core,
             "A",
             a_calib,
             int(self._settings.get("a_cam0_index", core.A_CAM0_INDEX)),
             int(self._settings.get("a_cam1_index", core.A_CAM1_INDEX)),
-            self._settings.get("a_backend", core.A_BACKEND),
+            self._settings.get("a_backend", "AUTO"),
         )
 
         set_b = None
@@ -1236,17 +1230,18 @@ class GameEngine:
                     int(self._settings.get("remote_b_udp_port", core.REMOTE_B_UDP_PORT)),
                 )
             else:
-                set_b = core.StereoSet(
+                set_b = self._make_stereo_set(
+                    core,
                     "B",
                     b_calib,
                     int(self._settings.get("b_cam0_index", core.B_CAM0_INDEX)),
                     int(self._settings.get("b_cam1_index", core.B_CAM1_INDEX)),
-                    self._settings.get("b_backend", core.B_BACKEND),
+                    self._settings.get("b_backend", "AUTO"),
                 )
 
         ble_feedback = None
         multi_ble_feedbacks = None
-        ble_mode = os.getenv("POSERING_BLE_MODE", self._settings.get("ble_mode", "single")).strip().lower()
+        ble_mode = self._resolve_ble_mode()
         if bool(self._settings.get("ble_enabled", core.ENABLE_XIAO_BLE)):
             if ble_mode in ["multi", "multi_connect", "multi_connect_only", "multi_visible", "multi_visible_white", "multi_stage_white", "multi_distance", "multi_distance_feedback"]:
                 multi_ble_feedbacks = self._make_multi_ble_feedbacks(core)
@@ -1335,52 +1330,18 @@ class GameEngine:
             if set_b is not None:
                 set_b.release()
 
-    def _run_simulation(self):
-        ctx = self._make_context()
-        last_snapshot_state = None
+    def _run_error_state(self, message):
+        colors = self._blank_colors()
         with self._frame_lock:
-            self._jpeg[0] = _encode_jpeg(_blank_frame("SIM A CAM 0", height=480))
-            self._jpeg[1] = _encode_jpeg(_blank_frame("SIM A CAM 1", height=480))
-            self._jpeg[2] = _encode_jpeg(_blank_frame("SIM B CAM 0", height=480))
-            self._jpeg[3] = _encode_jpeg(_blank_frame("SIM B CAM 1", height=480))
+            self._jpeg[0] = _encode_jpeg(_blank_frame("A CAM 0 unavailable", height=480))
+            self._jpeg[1] = _encode_jpeg(_blank_frame("A CAM 1 unavailable", height=480))
+            self._jpeg[2] = _encode_jpeg(_blank_frame("B CAM unavailable", height=480))
+            self._jpeg[3] = _encode_jpeg(_blank_frame("B CAM unavailable", height=480))
 
         while self._running:
-            self._process_commands(self._pop_commands(), ctx)
-
-            now = time.time()
-            colors = {}
-            for i, color in enumerate(COLOR_ORDER):
-                distance = 180.0 + 180.0 * np.sin(now * 0.7 + i * 1.8)
-                inside = bool(distance <= self._clear_dist)
-                colors[color] = {
-                    "status": "OK" if inside else ("CLOSE" if distance <= self._clear_dist * 2 else "FAR"),
-                    "distance": float(abs(distance)),
-                    "inside": inside,
-                    "source": "SIM",
-                    "used_set": "SIM",
-                    "proximity": max(0.0, min(1.0, 1.0 - abs(distance) / (self._clear_dist * 3.0))),
-                    "target": [100.0 * i, 50.0, 200.0],
-                    "current": [100.0 * i + distance, 50.0, 200.0],
-                    "y_diff": 0.0,
-                }
-
-            if ctx.get("target_slots"):
-                colors = self._color_agnostic_colors(
-                    ctx.get("target_slots") or [],
-                    self._current_points_from_color_state(colors),
-                )
-
-            self._tick_game(ctx, colors)
-            self._update_current_pose_cache(colors=colors)
-            self._ble_status = {"enabled": False, "simulation": True}
-
-            if ctx["game_state"] in (GameState.POSE_CLEAR, GameState.TIME_UP):
-                marker = (ctx["game_state"], ctx["round"], ctx["pose"])
-                if marker != last_snapshot_state:
-                    self._queue_snapshot(ctx)
-                    last_snapshot_state = marker
-            else:
-                last_snapshot_state = None
-
+            self._pop_commands()
+            self._ble_status = {"enabled": False}
+            ctx = self._make_context()
+            ctx["message"] = message
             self._publish(ctx, colors)
-            time.sleep(0.05)
+            time.sleep(1.0)

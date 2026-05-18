@@ -905,6 +905,25 @@ function pollBLE() {
         </div>`;
         return;
       }
+      if (status.rings || status.colors) {
+        const rings = status.rings || status.colors || {};
+        const rows = COLOR_ORDER.map(color => {
+          const ring = rings[color] || {};
+          const connected = !!ring.connected;
+          const cls = connected ? 'connected' : 'disconnected';
+          const value = ring.value == null ? '-' : ring.value;
+          const distance = ring.distance == null ? '' : ` | ${Math.round(ring.distance)}mm`;
+          const reason = ring.reason ? ` | ${ring.reason}` : '';
+          return `<div class="ble-row">
+            <span class="ble-dot ${cls}"></span>${color}: ${connected ? 'connected' : 'searching'} | value ${value}${distance}${reason}
+          </div>`;
+        }).join('');
+        el.innerHTML = `
+          <div class="ble-row">mode: ${status.mode || 'multi'} | ${status.connected ? 'sockets working fine' : 'searching bracelets'}</div>
+          ${rows}
+        `;
+        return;
+      }
       const connected = !!status.connected;
       const cls = connected ? 'connected' : 'disconnected';
       const visible = status.stage_visible ? 'stage visible' : 'out of stage';
