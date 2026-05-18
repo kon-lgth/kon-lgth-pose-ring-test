@@ -764,33 +764,6 @@
       align-items: center;
     }
 
-    .difficulty-choice {
-      display: grid;
-      gap: 0.55rem;
-      width: min(300px, 42vw);
-      color: #111;
-      font-family: var(--font-en);
-      font-size: clamp(0.5rem, 0.85vw, 0.7rem);
-    }
-
-    html[lang="ja"] .difficulty-choice {
-      font-family: var(--font-ja);
-      font-size: clamp(1.05rem, 1.6vw, 1.25rem);
-    }
-
-    .difficulty-choice select {
-      width: 100%;
-      border: 3px solid #111;
-      border-radius: 999px;
-      background: #fff;
-      color: #111;
-      font-family: inherit;
-      font-size: inherit;
-      padding: 0.65rem 1rem 0.58rem;
-      outline: none;
-      box-shadow: 0 8px 0 rgba(0, 0, 0, 0.10);
-    }
-
     .color-option {
       width: 58px;
       height: 46px;
@@ -1219,14 +1192,6 @@
           </div>
         </div>
       </div>
-      <label class="difficulty-choice">
-        <span data-i18n="difficultyLabel">Difficulty</span>
-        <select id="setupDifficulty">
-          <option value="easy" data-i18n="difficultyEasy">Easy</option>
-          <option value="medium" selected data-i18n="difficultyMedium">Medium</option>
-          <option value="hard" data-i18n="difficultyHard">Hard</option>
-        </select>
-      </label>
       <button class="setup-confirm" id="setupConfirmBtn" type="button" data-i18n="confirmReady">OK!</button>
     </section>
 
@@ -1276,10 +1241,6 @@
         team1Label: 'Team 1',
         team2Label: 'Team 2',
         preferredColor: 'Color',
-        difficultyLabel: 'Difficulty',
-        difficultyEasy: 'Easy',
-        difficultyMedium: 'Medium',
-        difficultyHard: 'Hard',
         confirmReady: 'OK',
         jankenMain: 'Use Jan Ken Po to decide who goes first.',
         jankenSub: 'Determine who goes first and second.',
@@ -1313,10 +1274,6 @@
         team1Label: 'チーム1',
         team2Label: 'チーム2',
         preferredColor: '色',
-        difficultyLabel: '難易度',
-        difficultyEasy: 'かんたん',
-        difficultyMedium: 'ふつう',
-        difficultyHard: 'むずかしい',
         confirmReady: 'OK!',
         jankenMain: 'じゃんけんで先攻・後攻をきめよう！',
         jankenSub: '先攻と後攻を決めます。',
@@ -1657,7 +1614,6 @@
       const first = assigned[firstIndex];
       const second = assigned[firstIndex === 0 ? 1 : 0];
       const players = [first, second];
-      const difficulty = document.getElementById('setupDifficulty')?.value || 'medium';
       const playerColors = {
         [assigned[0]]: '#2563eb',
         [assigned[1]]: '#ef4444',
@@ -1668,7 +1624,6 @@
         players,
         first_player: first,
         player_colors: playerColors,
-        difficulty,
       });
       const params = new URLSearchParams({
         mode: 'multiplayer',
@@ -1683,7 +1638,6 @@
 
     function prepareSinglePlayerGame() {
       const playerName = document.getElementById('setupPlayer1').value.trim() || 'Player 1';
-      const difficulty = document.getElementById('setupDifficulty')?.value || 'medium';
       socket.emit('cmd_prepare_game', {
         mode: 'single',
         type: 'single',
@@ -1692,7 +1646,6 @@
         player_colors: {
           [playerName]: selectedSingleColor,
         },
-        difficulty,
       });
       const params = new URLSearchParams({
         mode: 'single',
