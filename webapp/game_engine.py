@@ -138,6 +138,7 @@ class GameEngine:
             self._time_per_pose = 9999.0
         self._poses_per_round = int(settings.get("poses_per_round", 3))
         self._num_rounds = int(settings.get("num_rounds", 3))
+        self._required_target_count = max(1, min(4, int(settings.get("required_target_count", 4) or 4)))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
         self._player_colors = dict(settings.get("player_colors", {}) or {})
         self._simulation = bool(settings.get("simulation", False))
@@ -652,6 +653,7 @@ class GameEngine:
 
         targets_set = bool(ctx.get("targets_set", False))
         target_count = len(ctx.get("target_slots") or [])
+        required_target_count = min(target_count, self._required_target_count)
         matched_count = len({
             colors[color].get("matched_target_index")
             for color in COLOR_ORDER
@@ -660,7 +662,7 @@ class GameEngine:
         all_inside = (
             targets_set
             and (
-                (target_count > 0 and matched_count >= target_count)
+                (target_count > 0 and matched_count >= required_target_count)
                 or (target_count == 0 and all(colors[color]["inside"] for color in COLOR_ORDER))
             )
         )

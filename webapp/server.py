@@ -76,6 +76,7 @@ CONFIG = {
     "difficulty":     "medium",
     "poses_per_round": 3,
     "num_rounds":      1,
+    "required_target_count": 4,
 
     # XIAO nRF52840 / NeoPixel / DFPlayer firmware.
     # Uses BleFeedbackController from redlight_ring_2pc_main.py.
@@ -123,6 +124,7 @@ PREPARED_GAME = {
     "player_colors": {},
     "difficulty": "medium",
     "clear_dist_mm": None,
+    "required_target_count": 4,
     "status": "idle",
 }
 
@@ -245,6 +247,54 @@ def _snapshot_missing_colors(snapshot):
     points = _snapshot_target_points(snapshot)
     found = {item.get("source_color") for item in points if item.get("source_color")}
     return [color for color in COLOR_ORDER if color not in found]
+
+
+def _requested_target_count(data):
+    raw = (data or {}).get("required_target_count")
+    if raw in (None, ""):
+        raw = PREPARED_GAME.get("required_target_count", CONFIG["required_target_count"])
+    try:
+        return max(1, min(4, int(raw)))
+    except (TypeError, ValueError):
+        return CONFIG["required_target_count"]
+
+
+def _selected_pose_colors(payload, fallback_points):
+    selected = payload.get("selected_colors")
+    if not isinstance(selected, list) or not selected:
+        limit = max(1, min(4, int(payload.get("pose_color_count") or len(fallback_points) or 4)))
+        selected = []
+        for point in fallback_points:
+            color = point.get("source_color")
+            if color in COLOR_ORDER and color not in selected:
+                selected.append(color)
+            if len(selected) >= limit:
+                break
+    return [color for color in selected if color in COLOR_ORDER]
+
+
+def _filter_pose_draft_colors(draft, selected_colors):
+    selected = set(selected_colors)
+    sets = {}
+    for set_name, set_points in (draft.get("sets") or {}).items():
+        if not isinstance(set_points, dict):
+            continue
+        filtered = {
+            color: point
+            for color, point in set_points.items()
+            if color in selected and point is not None
+        }
+        if filtered:
+            sets[set_name] = filtered
+    target_points = [
+        point for point in (draft.get("target_points") or [])
+        if isinstance(point, dict) and point.get("source_color") in selected
+    ]
+    draft = dict(draft)
+    draft["sets"] = sets
+    draft["target_points"] = target_points
+    draft["selected_colors"] = list(selected_colors)
+    return draft
 
 
 def _current_vs_players():
@@ -377,6 +427,7 @@ def _vs_engine_settings(players):
         "player_colors": VS_SESSION.get("player_colors", {}),
         "difficulty": difficulty,
         "clear_dist_mm": clear_dist_mm,
+        "required_target_count": _requested_target_count({}),
         "poses_per_round": VS_POSES_PER_TURN,
         "num_rounds": 1,
         "a_cam0_index": CONFIG["a_cam0_index"],
@@ -603,6 +654,13 @@ def api_capture_pose():
     if not snapshot or not snapshot.get("sets"):
         return jsonify({"error": "No live pose coordinates are available yet"}), 409
 
+    target_points = snapshot.get("target_points", []) or _snapshot_target_points(snapshot)
+    detected_colors = []
+    for point in target_points:
+        color = point.get("source_color") if isinstance(point, dict) else None
+        if color in COLOR_ORDER and color not in detected_colors:
+            detected_colors.append(color)
+
     photos = _front_cameras_b64()
     draft_id = uuid.uuid4().hex
     draft = {
@@ -611,10 +669,11 @@ def api_capture_pose():
         "difficulty": difficulty,
         "created_at": time.time(),
         "sets": snapshot["sets"],
-        "target_points": snapshot.get("target_points", []),
+        "target_points": target_points,
         "source": snapshot.get("source", "live"),
         "setup_photo": photos.get("cam0"),
         "setup_photos": photos,
+        "detected_colors": detected_colors,
     }
     POSE_CAPTURE_DRAFTS[draft_id] = draft
     return jsonify({
@@ -623,6 +682,7 @@ def api_capture_pose():
         "difficulty": difficulty,
         "setup_photo": draft["setup_photo"],
         "setup_photos": photos,
+        "detected_colors": detected_colors,
     })
 
 
@@ -664,6 +724,17 @@ def api_save_pose():
             "source": snapshot.get("source", "live"),
         }
 
+    selected_colors = _selected_pose_colors(payload, draft.get("target_points", []))
+    try:
+        requested_pose_count = max(1, min(4, int(payload.get("pose_color_count") or len(selected_colors) or 4)))
+    except (TypeError, ValueError):
+        requested_pose_count = len(selected_colors)
+    if len(selected_colors) != requested_pose_count:
+        return jsonify({"error": f"Select exactly {requested_pose_count} color(s) to save."}), 400
+    draft = _filter_pose_draft_colors(draft, selected_colors)
+    if not draft.get("sets"):
+        return jsonify({"error": "Select at least one detected color to save."}), 400
+
     pose = {
         "id": uuid.uuid4().hex,
         "name": name,
@@ -673,6 +744,7 @@ def api_save_pose():
         "target_points": draft.get("target_points", []),
         "setup_photo": draft.get("setup_photo"),
         "setup_photos": draft.get("setup_photos", {}),
+        "selected_colors": draft.get("selected_colors", selected_colors),
         "source": draft.get("source", "live"),
     }
     poses = _load_poses()
@@ -719,6 +791,7 @@ def on_prepare_game(data):
 
     difficulty = _requested_difficulty(data)
     raw_clear_dist = (data or {}).get("clear_dist_mm")
+    required_target_count = _requested_target_count(data)
     clear_dist_mm = (
         _requested_clear_dist({"clear_dist_mm": raw_clear_dist}, difficulty)
         if raw_clear_dist not in (None, "")
@@ -733,6 +806,7 @@ def on_prepare_game(data):
         "player_colors": (data or {}).get("player_colors", {}),
         "difficulty": difficulty,
         "clear_dist_mm": clear_dist_mm,
+        "required_target_count": required_target_count,
         "status": "ready_for_operator",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)
@@ -746,15 +820,18 @@ def on_start_game(data):
     data = data or {}
     difficulty = _requested_difficulty(data)
     clear_dist_mm = _requested_clear_dist(data, difficulty)
+    required_target_count = _requested_target_count(data)
     PREPARED_GAME.update({
         "difficulty": difficulty,
         "clear_dist_mm": clear_dist_mm,
+        "required_target_count": required_target_count,
     })
     if PREPARED_GAME.get("type") in {"versus", "team_battle"}:
         if VS_SESSION.get("active"):
             VS_SESSION.update({
                 "difficulty": difficulty,
                 "clear_dist_mm": clear_dist_mm,
+                "required_target_count": required_target_count,
             })
         if not VS_SESSION.get("active") or VS_SESSION.get("phase") in {"idle"}:
             VS_SESSION.update({
@@ -764,6 +841,7 @@ def on_start_game(data):
                 "player_colors": PREPARED_GAME.get("player_colors", {}),
                 "difficulty": difficulty,
                 "clear_dist_mm": clear_dist_mm,
+                "required_target_count": required_target_count,
                 "turn_index": 0,
                 "turns": [],
             })
@@ -785,6 +863,7 @@ def on_start_game(data):
         "player_colors":   PREPARED_GAME.get("player_colors", {}),
         "difficulty":      difficulty,
         "clear_dist_mm":   clear_dist_mm,
+        "required_target_count": required_target_count,
         "poses_per_round": CONFIG["poses_per_round"],
         "num_rounds":      CONFIG["num_rounds"],
         "time_per_pose":   data.get("time_per_pose"),
@@ -811,6 +890,7 @@ def on_start_game(data):
         "players": players,
         "difficulty": difficulty,
         "clear_dist_mm": clear_dist_mm,
+        "required_target_count": required_target_count,
         "status": "started",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)
@@ -848,6 +928,7 @@ def on_reset():
         "player_colors": {},
         "difficulty": CONFIG["difficulty"],
         "clear_dist_mm": None,
+        "required_target_count": CONFIG["required_target_count"],
         "status": "idle",
     })
     socketio.emit("lobby_setup", PREPARED_GAME)

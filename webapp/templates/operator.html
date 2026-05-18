@@ -489,6 +489,15 @@
             <input type="number" id="s-clear-radius" min="50" max="1500" step="10" value="390"/>
           </div>
           <div class="form-row">
+            <label>COLORS REQUIRED TO CLEAR</label>
+            <select id="s-target-count">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+            </select>
+          </div>
+          <div class="form-row">
             <label>POSES / ROUND</label>
             <select id="s-poses">
               <option value="3" selected>3</option>
@@ -626,6 +635,14 @@
         <option value="hard">HIGH</option>
       </select>
 
+      <label for="poseColorCount">COLORS TO SAVE</label>
+      <select id="poseColorCount">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+      </select>
+
       <div class="pose-camera-grid" id="poseLivePreview">
         <div class="pose-camera-card">
           <img src="/video_feed/0" alt="Front Camera 0 live preview"/>
@@ -649,6 +666,7 @@
       </div>
 
       <div class="pose-confirm-text" id="poseConfirmText"></div>
+      <div class="pose-confirm-text" id="poseColorSelect" style="display:none;"></div>
       <div class="btn-row" id="poseEditActions">
         <button class="ctrl-btn reset" onclick="closePoseModal()">CANCEL</button>
         <button class="ctrl-btn start" onclick="savePoseFromModal()">CONFIRM SAVE</button>

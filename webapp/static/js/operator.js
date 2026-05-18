@@ -155,6 +155,7 @@ window.startGame = function () {
     players:         players.length ? players : ['Player 1'],
     difficulty:      document.getElementById('s-difficulty').value,
     clear_dist_mm:   parseFloat(document.getElementById('s-clear-radius')?.value || ''),
+    required_target_count: parseInt(document.getElementById('s-target-count')?.value || '4', 10),
     poses_per_round: parseInt(document.getElementById('s-poses').value),
     num_rounds:      parseInt(document.getElementById('s-rounds').value),
     no_time_limit:   noTimeLimit,
@@ -322,15 +323,22 @@ window.openPoseModal = function () {
   const modal = document.getElementById('poseModal');
   const name = document.getElementById('poseName');
   const difficulty = document.getElementById('poseDifficulty');
+  const colorCount = document.getElementById('poseColorCount');
   const confirm = document.getElementById('poseConfirmText');
+  const colorSelect = document.getElementById('poseColorSelect');
   capturedPoseDraft = null;
   poseCaptureBusy = false;
   if (name) name.value = '';
   if (difficulty) difficulty.value = document.getElementById('s-difficulty')?.value || 'medium';
+  if (colorCount) colorCount.value = document.getElementById('s-target-count')?.value || '4';
   const cam0 = document.getElementById('poseReviewCam0');
   const cam1 = document.getElementById('poseReviewCam1');
   if (cam0) cam0.removeAttribute('src');
   if (cam1) cam1.removeAttribute('src');
+  if (colorSelect) {
+    colorSelect.style.display = 'none';
+    colorSelect.innerHTML = '';
+  }
   setPoseCaptureStage('edit');
   if (confirm) confirm.textContent = 'Check both front cameras, then confirm. A 5, 4, 3, 2, 1 countdown will capture the pose coordinates and photos.';
   if (modal) modal.classList.add('show');
@@ -358,11 +366,12 @@ function setPoseCaptureStage(stage, message) {
 function poseCaptureInputs() {
   const name = document.getElementById('poseName')?.value.trim();
   const difficulty = document.getElementById('poseDifficulty')?.value || 'medium';
+  const poseColorCount = parseInt(document.getElementById('poseColorCount')?.value || '4', 10);
   if (!name) {
     flash('Pose name is required', 'red');
     return null;
   }
-  return { name, difficulty };
+  return { name, difficulty, pose_color_count: Math.max(1, Math.min(4, poseColorCount || 4)) };
 }
 
 function wait(ms) {
@@ -418,9 +427,38 @@ async function capturePoseDraft() {
     if (body.setup_photos?.cam1) cam1.src = `data:image/jpeg;base64,${body.setup_photos.cam1}`;
     else cam1.removeAttribute('src');
   }
-  setPoseCaptureStage('review', 'Is this pose photo OK? Save it, or take the pose again.');
+  renderPoseColorSelection(body.detected_colors || [], inputs.pose_color_count);
+  setPoseCaptureStage('review', 'Is this pose photo OK? Select the colors to save, then confirm.');
   operatorSound.modalOpen();
   return capturedPoseDraft;
+}
+
+function renderPoseColorSelection(detectedColors, requestedCount) {
+  const container = document.getElementById('poseColorSelect');
+  if (!container) return;
+  const colors = (detectedColors || []).filter(color => COLOR_ORDER.includes(color));
+  const limit = Math.max(1, Math.min(4, Number(requestedCount) || 4));
+  if (!colors.length) {
+    container.style.display = 'block';
+    container.innerHTML = 'No colors detected.';
+    return;
+  }
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div style="margin-bottom:0.5rem;">Choose ${limit} color${limit === 1 ? '' : 's'} to save:</div>
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0.45rem; text-align:left;">
+      ${colors.map((color, index) => `
+        <label style="display:flex; align-items:center; gap:0.45rem;">
+          <input type="checkbox" class="pose-save-color" value="${color}" ${index < limit ? 'checked' : ''}/>
+          <span>${color}</span>
+        </label>
+      `).join('')}
+    </div>
+  `;
+}
+
+function selectedPoseSaveColors() {
+  return Array.from(document.querySelectorAll('.pose-save-color:checked')).map(input => input.value);
 }
 
 window.savePoseFromModal = async function () {
@@ -437,6 +475,12 @@ window.confirmCapturedPose = async function () {
     flash('Capture the pose first', 'yellow');
     return;
   }
+  const selectedColors = selectedPoseSaveColors();
+  const requestedCount = Math.max(1, Math.min(4, Number(capturedPoseDraft.pose_color_count) || 4));
+  if (selectedColors.length !== requestedCount) {
+    flash(`Select exactly ${requestedCount} color${requestedCount === 1 ? '' : 's'} to save`, 'yellow');
+    return;
+  }
   const res = await fetch('/api/poses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -444,6 +488,8 @@ window.confirmCapturedPose = async function () {
       name: capturedPoseDraft.name,
       difficulty: capturedPoseDraft.difficulty,
       capture_id: capturedPoseDraft.capture_id,
+      pose_color_count: capturedPoseDraft.pose_color_count,
+      selected_colors: selectedColors,
     }),
   });
   const body = await res.json().catch(() => ({}));
