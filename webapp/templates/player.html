@@ -610,15 +610,22 @@
     .vs-sub {
       font-size: clamp(0.8rem, 1.4vw, 1.1rem);
       line-height: 1.8;
-      max-width: 960px;
+      width: min(1100px, 94vw);
+      max-width: 1100px;
+      text-align: center;
     }
     .vs-status-row {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(90px, 1fr));
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
       gap: clamp(0.65rem, 1.5vw, 1rem);
       width: min(900px, 90vw);
+      margin-inline: auto;
     }
     .vs-status-pill {
+      flex: 0 1 min(210px, 28vw);
+      min-width: min(210px, 28vw);
       border: 4px solid #fff;
       border-radius: 8px;
       background: transparent;

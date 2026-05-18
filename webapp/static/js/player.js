@@ -584,8 +584,9 @@ function vsTextKey(baseKey, state = _vsState) {
   return vsIsTeamMode(state) ? `${baseKey}Team` : baseKey;
 }
 
-function vsPills(doneCount) {
-  return `<div class="vs-status-row">${Array.from({ length: 5 }, (_, i) => (
+function vsPills(doneCount, totalCount = (_vsState && _vsState.poses_per_turn) || 3) {
+  const total = Math.max(1, Number(totalCount) || 3);
+  return `<div class="vs-status-row">${Array.from({ length: total }, (_, i) => (
     `<div class="vs-status-pill ${i < doneCount ? 'done' : ''}">${i < doneCount ? 'OK!' : getPlayerText('vsPoseReady')}</div>`
   )).join('')}</div>`;
 }
@@ -631,11 +632,12 @@ function retryVsSetupCapture() {
 }
 
 function startVsSetupCountdown(state) {
-  const key = `${state.turn_index}:${state.current_index}:${state.phase}`;
+  const sessionId = state.session_id || 0;
+  const key = `${sessionId}:${state.turn_index}:${state.current_index}:${state.phase}`;
   if (_vsCountdownKey === key && _vsCountdownTimer) return;
   clearInterval(_vsCountdownTimer);
   _vsCountdownKey = key;
-  const setupTurnKey = `${state.turn_index}:setup-ready`;
+  const setupTurnKey = `${sessionId}:${state.turn_index}:setup-ready`;
   const shouldShowReady = state.current_index === 0 && _vsSetupReadyShownKey !== setupTurnKey;
   _vsCountdownMode = shouldShowReady ? 'ready' : 'setup';
   if (shouldShowReady) _vsSetupReadyShownKey = setupTurnKey;
@@ -685,7 +687,7 @@ function renderVsSetupCountdown() {
 }
 
 function startVsChallengeReadyCountdown(state) {
-  const key = `${state.turn_index}:${state.phase}`;
+  const key = `${state.session_id || 0}:${state.turn_index}:${state.phase}`;
   if (_vsChallengeReadyKey === key && _vsCountdownTimer) return;
   clearInterval(_vsCountdownTimer);
   _vsChallengeReadyKey = key;
@@ -866,7 +868,7 @@ function renderVsResults(state) {
     content.innerHTML = `${vsTopBrand()}<div class="vs-title">${getPlayerText('vsResultsTitle')}</div>`;
     return;
   }
-  const maxPages = state.poses_per_turn || 5;
+  const maxPages = state.poses_per_turn || 3;
   if (_vsResultPage >= maxPages) {
     renderVsWinner(state);
     return;
@@ -1401,7 +1403,7 @@ function applyState(state) {
   // ── Round / pose ──
   const rdEl = document.getElementById('roundDisplay');
   if (rdEl) rdEl.textContent = `${state.round} / ${state.num_rounds}`;
-  buildPips(state.poses_per_round || 5, state.pose || 0);
+  buildPips(state.poses_per_round || 3, state.pose || 0);
 
   // ── Status message ──
   const smEl = document.getElementById('statusMsg');

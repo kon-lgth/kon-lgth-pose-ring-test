@@ -24,6 +24,7 @@ import time
 import json
 import uuid
 import logging
+import threading
 
 import cv2
 from flask import Flask, Response, render_template, jsonify, request, send_from_directory
@@ -73,7 +74,7 @@ CONFIG = {
     # Default game settings (overridable from the web UI)
     "players":        ["Player 1", "Player 2"],
     "difficulty":     "medium",
-    "poses_per_round": 5,
+    "poses_per_round": 3,
     "num_rounds":      3,
 
     # XIAO nRF52840 / NeoPixel / DFPlayer firmware.
@@ -126,13 +127,19 @@ PREPARED_GAME = {
 POSE_CAPTURE_DRAFTS = {}
 POSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poses.json")
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
-VS_POSES_PER_TURN = 5
+VS_POSES_PER_TURN = 3
 VS_SETUP_SECONDS = 10
+VS_CLEAR_PAUSE_SECONDS = float(os.getenv("POSERING_VS_CLEAR_PAUSE_SECONDS", "3.0"))
+VS_CLEAR_DIST_MM = {
+    "versus": float(os.getenv("POSERING_VS_CLEAR_DIST_MM", "520")),
+    "team_battle": float(os.getenv("POSERING_TEAM_CLEAR_DIST_MM", "390")),
+}
 VS_MIN_TARGET_POINTS = max(1, _env_int("POSERING_VS_MIN_TARGET_POINTS", len(COLOR_ORDER)))
 
 VS_SESSION = {
     "active": False,
     "phase": "idle",
+    "session_id": 0,
     "players": [],
     "player_colors": {},
     "type": None,
@@ -258,6 +265,7 @@ def _public_vs_state(extra=None):
     state = {
         "active": VS_SESSION.get("active", False),
         "phase": VS_SESSION.get("phase", "idle"),
+        "session_id": VS_SESSION.get("session_id", 0),
         "players": players,
         "player_colors": VS_SESSION.get("player_colors", {}),
         "type": VS_SESSION.get("type") or PREPARED_GAME.get("type"),
@@ -336,10 +344,12 @@ def _begin_vs_challenge_after_ready():
 
 
 def _vs_engine_settings(players):
+    mode_type = VS_SESSION.get("type") or PREPARED_GAME.get("type") or "versus"
     return {
         "players": players,
         "player_colors": VS_SESSION.get("player_colors", {}),
         "difficulty": "medium",
+        "clear_dist_mm": VS_CLEAR_DIST_MM.get(mode_type, VS_CLEAR_DIST_MM["versus"]),
         "poses_per_round": VS_POSES_PER_TURN,
         "num_rounds": 1,
         "a_cam0_index": CONFIG["a_cam0_index"],
@@ -362,23 +372,22 @@ def _vs_engine_settings(players):
     }
 
 
-def _record_vs_challenge_clear(snap):
-    turn_index = VS_SESSION.get("turn_index", 0)
+def _finish_vs_clear_after_pause(turn_index, cleared_index):
+    if not VS_SESSION.get("active") or VS_SESSION.get("phase") != "challenge":
+        return
+    if int(VS_SESSION.get("turn_index", -1)) != int(turn_index):
+        return
+    if int(VS_SESSION.get("current_index", -1)) != int(cleared_index):
+        return
     if turn_index >= len(VS_SESSION.get("turns", [])):
         return
-    turn = VS_SESSION["turns"][turn_index]
-    idx = int(VS_SESSION.get("current_index", 0))
-    now = time.time()
-    lap = max(0.0, now - float(VS_SESSION.get("lap_started_at", now)))
-    turn.setdefault("challenge", []).append({
-        "index": idx,
-        "photo": snap.get("cam0") or _front_camera_b64(),
-        "lap_time": lap,
-        "cleared_at": now,
-    })
-    VS_SESSION["current_index"] = idx + 1
 
-    if VS_SESSION["current_index"] >= VS_POSES_PER_TURN:
+    turn = VS_SESSION["turns"][turn_index]
+    next_index = int(cleared_index) + 1
+    VS_SESSION["current_index"] = next_index
+
+    if next_index >= VS_POSES_PER_TURN:
+        now = time.time()
         turn["total_time"] = max(0.0, now - float(VS_SESSION.get("challenge_started_at", now)))
         if VS_SESSION.get("turn_index", 0) == 0:
             VS_SESSION.update({
@@ -397,12 +406,33 @@ def _record_vs_challenge_clear(snap):
         _emit_vs()
         return
 
-    next_pose = turn["setup"][VS_SESSION["current_index"]]["pose"]
+    next_pose = turn["setup"][next_index]["pose"]
     VS_SESSION["lap_started_at"] = time.time()
     engine.send_command("next_pose")
     engine.send_command("load_pose", next_pose)
     engine.send_command("start_game", _vs_engine_settings([turn["challenger"]]))
     _emit_vs()
+
+
+def _record_vs_challenge_clear(snap):
+    turn_index = VS_SESSION.get("turn_index", 0)
+    if turn_index >= len(VS_SESSION.get("turns", [])):
+        return
+    turn = VS_SESSION["turns"][turn_index]
+    idx = int(VS_SESSION.get("current_index", 0))
+    now = time.time()
+    lap = max(0.0, now - float(VS_SESSION.get("lap_started_at", now)))
+    turn.setdefault("challenge", []).append({
+        "index": idx,
+        "photo": snap.get("cam0") or _front_camera_b64(),
+        "lap_time": lap,
+        "cleared_at": now,
+    })
+    VS_SESSION["message"] = f"Pose {idx + 1} clear. Pausing before the next pose."
+    _emit_vs()
+    timer = threading.Timer(VS_CLEAR_PAUSE_SECONDS, _finish_vs_clear_after_pause, args=(turn_index, idx))
+    timer.daemon = True
+    timer.start()
 
 # ---------------------------------------------------------------------------
 # Background broadcaster — pushes state to all clients at ~20 Hz
@@ -680,6 +710,7 @@ def on_start_game(data):
     if PREPARED_GAME.get("type") in {"versus", "team_battle"}:
         if not VS_SESSION.get("active") or VS_SESSION.get("phase") in {"idle"}:
             VS_SESSION.update({
+                "session_id": int(VS_SESSION.get("session_id", 0)) + 1,
                 "type": PREPARED_GAME.get("type", "versus"),
                 "players": PREPARED_GAME.get("players", ["Player 1", "Player 2"]),
                 "player_colors": PREPARED_GAME.get("player_colors", {}),
@@ -703,7 +734,7 @@ def on_start_game(data):
         "players":         players,
         "player_colors":   PREPARED_GAME.get("player_colors", {}),
         "difficulty":      data.get("difficulty", "medium"),
-        "poses_per_round": int(data.get("poses_per_round", 5)),
+        "poses_per_round": CONFIG["poses_per_round"],
         "num_rounds":      int(data.get("num_rounds", 3)),
         "time_per_pose":   data.get("time_per_pose"),
         "no_time_limit":   bool(data.get("no_time_limit")),

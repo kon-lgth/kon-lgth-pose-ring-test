@@ -130,11 +130,13 @@ class GameEngine:
     def _apply_settings(self, settings):
         diff = DIFFICULTIES.get(settings.get("difficulty", "medium"), DIFFICULTIES["medium"])
         self._clear_dist = float(diff["clear_dist_mm"])
+        if settings.get("clear_dist_mm") not in (None, ""):
+            self._clear_dist = float(settings.get("clear_dist_mm"))
         self._hold_time = float(diff["hold_time"])
         self._time_per_pose = float(diff["time_per_pose"])
         if settings.get("vs_no_timeout"):
             self._time_per_pose = 9999.0
-        self._poses_per_round = int(settings.get("poses_per_round", 5))
+        self._poses_per_round = int(settings.get("poses_per_round", 3))
         self._num_rounds = int(settings.get("num_rounds", 3))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
         self._player_colors = dict(settings.get("player_colors", {}) or {})

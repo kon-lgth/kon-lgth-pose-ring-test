@@ -314,20 +314,17 @@
       align-self: end;
       display: grid;
       justify-items: center;
-      gap: clamp(0.8rem, 2vh, 1.35rem);
-      transform: translateY(0.6rem);
+      gap: clamp(0.35rem, 1vh, 0.8rem);
+      transform: translateY(0);
       filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.10));
     }
 
     .title-jp {
-      font-family: var(--font-title-ja);
-      font-size: clamp(3rem, 7.1vw, 7.1rem);
-      font-weight: 900;
-      line-height: 0.9;
-      letter-spacing: -0.04em;
-      transform: skewX(-9deg);
-      color: #000;
-      white-space: nowrap;
+      width: min(760px, 76vw);
+      height: clamp(88px, 15vh, 155px);
+      object-fit: contain;
+      object-position: center;
+      display: block;
     }
 
     .title-sub {
@@ -997,8 +994,8 @@
         min-width: min(270px, 82vw);
       }
       .title-jp {
-        font-size: clamp(2.3rem, 11vw, 4.2rem);
-        letter-spacing: -0.07em;
+        width: min(430px, 88vw);
+        height: clamp(68px, 12svh, 112px);
       }
       .title-sub {
         font-size: clamp(0.72rem, 3.8vw, 1.05rem);
@@ -1119,7 +1116,7 @@
     <span class="color-pin pin-yellow-2"></span>
 
     <div class="title-lockup" aria-label="PoseRing">
-      <div class="title-jp">ポーズリング</div>
+      <img class="title-jp" src="/assets/posering_logo.png" alt="ポーズリング"/>
       <div class="title-sub">-PoseRing-</div>
     </div>
     <img class="players-art" src="/assets/players-welcome-screen.png" alt="PoseRing players"/>
@@ -1165,7 +1162,7 @@
         <div class="multiplayer-card">
           <div class="multiplayer-card-title" data-i18n="teamBattleMode">チームバトル</div>
           <div class="multiplayer-card-art">
-            <img src="/assets/multiplayer/team-battle.png" alt="Team battle mode"/>
+            <img src="/assets/multiplayer/team-battle.jpg" alt="Team battle mode"/>
           </div>
         </div>
       </a>

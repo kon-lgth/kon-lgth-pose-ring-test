@@ -653,7 +653,7 @@ function applyState(state) {
   const opRound = document.getElementById('opRound');
   const opPose  = document.getElementById('opPose');
   if (opRound) opRound.textContent = `${state.round || 1} / ${state.num_rounds || 3}`;
-  if (opPose)  opPose.textContent  = `${state.pose  || 0} / ${state.poses_per_round || 5}`;
+  if (opPose)  opPose.textContent  = `${state.pose  || 0} / ${state.poses_per_round || 3}`;
 
   const isEnd = gs === 'GAME_OVER' || gs === 'GAME_CLEAR';
   const timer = document.getElementById('opTimer');
