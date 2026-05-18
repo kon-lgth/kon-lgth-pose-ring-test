@@ -682,6 +682,28 @@
     <div class="countdown-number" id="poseCaptureNumber">3</div>
   </div>
 
+  <div class="modal-backdrop" id="savedPosePreviewModal">
+    <div class="pose-modal">
+      <h2 id="savedPosePreviewTitle">SAVED POSE</h2>
+      <div class="pose-confirm-text" id="savedPosePreviewMeta"></div>
+      <div class="pose-camera-grid">
+        <div class="pose-camera-card">
+          <img id="savedPosePreviewCam0" alt="Saved pose front camera 0"/>
+          <div class="pose-camera-label">SAVED CAM 0</div>
+        </div>
+        <div class="pose-camera-card">
+          <img id="savedPosePreviewCam1" alt="Saved pose front camera 1"/>
+          <div class="pose-camera-label">SAVED CAM 1</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="ctrl-btn reset" onclick="closeSavedPosePreview()">CANCEL</button>
+        <button class="ctrl-btn reset" onclick="deletePreviewPose()">ERASE POSE</button>
+        <button class="ctrl-btn start" onclick="confirmLoadPreviewPose()">CONFIRM & LOAD</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="cameraModal">
     <div class="pose-modal">
       <h2>CAMERA CHECK</h2>

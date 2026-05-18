@@ -260,6 +260,7 @@ function showCameraModal(message) {
 /* ── Pose library ── */
 let poseLibrary = [];
 let selectedPoseId = '';
+let previewPoseId = '';
 let capturedPoseDraft = null;
 let poseCaptureBusy = false;
 
@@ -318,6 +319,75 @@ function updatePoseMeta() {
   clearRadiusTouched = false;
   applyDifficultyRadius(true);
 }
+
+function openSavedPosePreview(poseId) {
+  const pose = poseLibrary.find(p => p.id === poseId);
+  if (!pose) return;
+  previewPoseId = pose.id;
+  selectedPoseId = pose.id;
+
+  const title = document.getElementById('savedPosePreviewTitle');
+  const meta = document.getElementById('savedPosePreviewMeta');
+  const cam0 = document.getElementById('savedPosePreviewCam0');
+  const cam1 = document.getElementById('savedPosePreviewCam1');
+  if (title) title.textContent = pose.name || 'SAVED POSE';
+
+  const selectedColors = Array.isArray(pose.selected_colors) && pose.selected_colors.length
+    ? pose.selected_colors.join(', ')
+    : COLOR_ORDER.filter(color => ['A', 'B'].some(setName => pose.sets?.[setName]?.[color])).join(', ');
+  if (meta) {
+    meta.textContent = `${difficultyLabel(pose.difficulty)} | Colors: ${selectedColors || '—'}`;
+  }
+  if (cam0) {
+    if (pose.setup_photos?.cam0 || pose.setup_photo) cam0.src = `data:image/jpeg;base64,${pose.setup_photos?.cam0 || pose.setup_photo}`;
+    else cam0.removeAttribute('src');
+  }
+  if (cam1) {
+    if (pose.setup_photos?.cam1) cam1.src = `data:image/jpeg;base64,${pose.setup_photos.cam1}`;
+    else cam1.removeAttribute('src');
+  }
+
+  document.getElementById('savedPosePreviewModal')?.classList.add('show');
+  operatorSound.modalOpen();
+}
+
+window.closeSavedPosePreview = function () {
+  document.getElementById('savedPosePreviewModal')?.classList.remove('show');
+};
+
+window.confirmLoadPreviewPose = function () {
+  const id = previewPoseId || selectedPoseId;
+  const pose = poseLibrary.find(p => p.id === id);
+  if (!pose) {
+    flash('Choose a saved pose first', 'yellow');
+    return;
+  }
+  const select = document.getElementById('poseSelect');
+  if (select) select.value = id;
+  selectedPoseId = id;
+  updatePoseMeta();
+  socket.emit('cmd_load_pose', { id });
+  closeSavedPosePreview();
+};
+
+window.deletePreviewPose = async function () {
+  const id = previewPoseId || selectedPoseId;
+  const pose = poseLibrary.find(p => p.id === id);
+  if (!pose) {
+    flash('Choose a saved pose first', 'yellow');
+    return;
+  }
+  const res = await fetch(`/api/poses/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    flash(body.error || 'Could not delete pose', 'red');
+    return;
+  }
+  selectedPoseId = '';
+  previewPoseId = '';
+  closeSavedPosePreview();
+  flash('Pose deleted', 'red');
+};
 
 window.openPoseModal = function () {
   const modal = document.getElementById('poseModal');
@@ -509,10 +579,10 @@ window.loadSelectedPose = function () {
     flash('Choose a saved pose first', 'yellow');
     return;
   }
-  socket.emit('cmd_load_pose', { id });
+  openSavedPosePreview(id);
 };
 
-window.deleteSelectedPose = async function () {
+window.deleteSelectedPose = function () {
   const select = document.getElementById('poseSelect');
   const id = select && select.value;
   const pose = poseLibrary.find(p => p.id === id);
@@ -520,16 +590,7 @@ window.deleteSelectedPose = async function () {
     flash('Choose a saved pose first', 'yellow');
     return;
   }
-  if (!confirm(`Delete saved pose "${pose.name}"?`)) return;
-
-  const res = await fetch(`/api/poses/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    flash(body.error || 'Could not delete pose', 'red');
-    return;
-  }
-  selectedPoseId = '';
-  flash('Pose deleted', 'red');
+  openSavedPosePreview(id);
 };
 
 async function fetchPoseLibrary() {
@@ -874,3 +935,6 @@ document.addEventListener('click', (event) => {
 applyAudioSettings(audioSettings);
 fetchPoseLibrary();
 document.getElementById('poseSelect')?.addEventListener('change', updatePoseMeta);
+document.getElementById('poseSelect')?.addEventListener('change', (event) => {
+  if (event.target.value) openSavedPosePreview(event.target.value);
+});
