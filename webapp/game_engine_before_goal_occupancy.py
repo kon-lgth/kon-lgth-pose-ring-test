@@ -27,9 +27,9 @@ if ROOT_DIR not in sys.path:
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 DIFFICULTIES = {
-    "easy": {"clear_dist_mm": 400.0, "hold_time": 2.0, "time_per_pose": 75},
-    "medium": {"clear_dist_mm": 300.0, "hold_time": 2.0, "time_per_pose": 60},
-    "hard": {"clear_dist_mm": 250.0, "hold_time": 2.0, "time_per_pose": 45},
+    "easy": {"clear_dist_mm": 430.0, "hold_time": 1.5, "time_per_pose": 75},
+    "medium": {"clear_dist_mm": 390.0, "hold_time": 2.0, "time_per_pose": 60},
+    "hard": {"clear_dist_mm": 180.0, "hold_time": 3.0, "time_per_pose": 45},
 }
 
 
@@ -130,17 +130,17 @@ class GameEngine:
     def _apply_settings(self, settings):
         diff = DIFFICULTIES.get(settings.get("difficulty", "medium"), DIFFICULTIES["medium"])
         self._clear_dist = float(diff["clear_dist_mm"])
-        if settings.get("clear_dist_mm") not in (None, ""):
-            self._clear_dist = float(settings.get("clear_dist_mm"))
         self._hold_time = float(diff["hold_time"])
         self._time_per_pose = float(diff["time_per_pose"])
         if settings.get("vs_no_timeout"):
             self._time_per_pose = 9999.0
-        self._poses_per_round = int(settings.get("poses_per_round", 3))
+        if "time_per_pose" in settings and settings.get("time_per_pose") not in (None, ""):
+            self._time_per_pose = float(settings.get("time_per_pose"))
+        self._no_time_limit = bool(settings.get("no_time_limit") or settings.get("vs_no_timeout"))
+        self._poses_per_round = int(settings.get("poses_per_round", 5))
         self._num_rounds = int(settings.get("num_rounds", 3))
         self._players = list(settings.get("players", ["Player 1"])) or ["Player 1"]
         self._player_colors = dict(settings.get("player_colors", {}) or {})
-        self._simulation = bool(settings.get("simulation", False))
 
     def _current_player(self, ctx):
         if not self._players:
@@ -179,13 +179,14 @@ class GameEngine:
             "player_colors": dict(getattr(self, "_player_colors", {})),
             "current_player": self._current_player({"pose": 0}),
             "time_left": self._time_per_pose,
+            "no_time_limit": self._no_time_limit,
+            "elapsed_time": 0.0,
             "hold_progress": 0.0,
             "all_inside": False,
             "origin_set": True,
             "targets_set": False,
             "message": message,
             "difficulty": self._settings.get("difficulty", "medium"),
-            "simulation": self._simulation,
             "countdown": None,
             "pose_result": None,
             "current_pose_name": None,
@@ -193,6 +194,8 @@ class GameEngine:
             "colors": self._blank_colors(),
             "ble": {},
             "live_error": self._live_error,
+            "camera_error": None,
+            "camera_status": {"cam0": True, "cam1": True, "cam2": True, "cam3": True},
         }
 
     def _pop_commands(self):
@@ -223,13 +226,14 @@ class GameEngine:
                 "player_colors": dict(getattr(self, "_player_colors", {})),
                 "current_player": self._current_player(ctx),
                 "time_left": ctx.get("time_left", self._time_per_pose),
+                "no_time_limit": self._no_time_limit,
+                "elapsed_time": ctx.get("elapsed_time", 0.0),
                 "hold_progress": ctx.get("hold_progress", 0.0),
                 "all_inside": ctx.get("all_inside", False),
                 "origin_set": True,
                 "targets_set": ctx.get("targets_set", False),
                 "message": ctx.get("message", ""),
                 "difficulty": self._settings.get("difficulty", "medium"),
-                "simulation": self._simulation,
                 "countdown": ctx.get("countdown_n"),
                 "pose_result": ctx.get("pose_result"),
                 "current_pose_name": ctx.get("current_pose_name"),
@@ -237,20 +241,27 @@ class GameEngine:
                 "colors": colors,
                 "ble": dict(self._ble_status),
                 "live_error": self._live_error,
+                "camera_error": ctx.get("camera_error"),
+                "camera_status": ctx.get("camera_status", {}),
             }
 
     def _run(self):
-        if self._simulation:
-            self._run_simulation()
-            return
-
         try:
             self._run_live()
         except Exception as exc:
             self._live_error = str(exc)
-            print(f"[WebEngine] Live mode failed, switching to simulation: {exc}")
-            self._simulation = True
-            self._run_simulation()
+            print(f"[WebEngine] Live mode failed: {exc}")
+            self._publish_camera_error(str(exc))
+
+    def _publish_camera_error(self, message):
+        with self._frame_lock:
+            for cam_id in (0, 1, 2, 3):
+                self._jpeg[cam_id] = _encode_jpeg(_blank_frame(f"CAM {cam_id} unavailable", height=480))
+        with self._lock:
+            self._state = self._blank_state("Camera error. Check all camera connections.")
+            self._state["live_error"] = message
+            self._state["camera_error"] = message
+            self._state["camera_status"] = {"cam0": False, "cam1": False, "cam2": False, "cam3": False}
 
     def _configure_core(self):
         import redlight_ring_2pc_main as core
@@ -277,12 +288,19 @@ class GameEngine:
             "targets_set": False,
             "message": "Ready. Set targets, then start the game.",
             "time_left": self._time_per_pose,
+            "no_time_limit": self._no_time_limit,
+            "elapsed_time": 0.0,
             "hold_progress": 0.0,
             "all_inside": False,
             "clear_logged": False,
             "current_pose_name": None,
             "current_pose_difficulty": self._settings.get("difficulty", "medium"),
+            "current_pose_photo": None,
+            "current_pose_photos": {},
             "target_slots": [],
+            "target_claims": {},
+            "camera_error": None,
+            "camera_status": {"cam0": True, "cam1": True, "cam2": True, "cam3": True},
         }
 
     def _target_slots_from_pose_sets(self, sets, allowed_sets=None):
@@ -323,35 +341,109 @@ class GameEngine:
         for color in COLOR_ORDER:
             if set_a is not None:
                 st = set_a.states[color]
-                point = st.get("live_point") if st.get("live") else st.get("current_point")
+                point = self._valid_point(st.get("live_point") if st.get("live") else st.get("current_point"))
                 if point is not None:
                     current[color]["A"] = {
-                        "point": np.array(point, dtype=np.float64),
+                        "point": point,
                         "source": "A_LIVE" if st.get("live") else "LAST_USED",
                         "y_diff": st.get("y_diff"),
                     }
             if set_b is not None:
                 st = set_b.states[color]
-                point = st.get("live_point") if st.get("live") else st.get("current_point")
+                point = self._valid_point(st.get("live_point") if st.get("live") else st.get("current_point"))
                 if point is not None:
                     current[color]["B"] = {
-                        "point": np.array(point, dtype=np.float64),
+                        "point": point,
                         "source": "B_LIVE" if st.get("live") else "LAST_USED",
                         "y_diff": st.get("y_diff"),
                     }
         return current
 
+
     def _current_points_from_color_state(self, colors):
         current = {color: {} for color in COLOR_ORDER}
         for color in COLOR_ORDER:
-            point = (colors or {}).get(color, {}).get("current")
+            point = self._valid_point((colors or {}).get(color, {}).get("current"))
             if point is not None:
                 current[color]["SIM"] = {
-                    "point": np.array(point, dtype=np.float64),
+                    "point": point,
                     "source": "SIM",
                     "y_diff": (colors or {}).get(color, {}).get("y_diff"),
                 }
         return current
+
+
+    def _valid_point(self, point):
+        """Return a float64 3D vector, or None if point has invalid/partial data."""
+        if point is None:
+            return None
+        try:
+            arr = np.array(point, dtype=np.float64).reshape(-1)
+        except (TypeError, ValueError):
+            return None
+        if arr.size < 3:
+            return None
+        arr = arr[:3]
+        if not np.all(np.isfinite(arr)):
+            return None
+        return arr
+
+    def _nearest_target_ble_states(self, core, target_slots, current_by_color, raw_final_states=None):
+        """Independent BLE feedback target selection.
+
+        Game clear judging stays color-agnostic and uses _color_agnostic_colors().
+        BLE feedback should not depend on that target assignment, because one
+        ring may be temporarily unassigned while still approaching a target.
+        For each physical color, choose the nearest valid target slot among all
+        goals and return distance/inside info for that ring.
+        """
+        states = {}
+        max_distance = max(self._clear_dist * 3.0, 1.0)
+
+        for color in COLOR_ORDER:
+            nearest = None
+            nearest_index = None
+            color_current = (current_by_color or {}).get(color, {})
+
+            for target_index, slot in enumerate(target_slots or []):
+                detail = self._target_distance_for_color(color_current, slot)
+                if detail is None:
+                    continue
+                if nearest is None or detail["distance"] < nearest["distance"]:
+                    nearest = detail
+                    nearest_index = target_index
+
+            if nearest is not None:
+                distance = nearest["distance"]
+                inside = bool(distance <= self._clear_dist)
+                proximity = max(0.0, min(1.0, 1.0 - distance / max_distance))
+                states[color] = {
+                    "used_set": nearest.get("used_set", "-"),
+                    "source": nearest.get("source", "NO DATA"),
+                    "current": nearest.get("current"),
+                    "target": nearest.get("target"),
+                    "distance": distance,
+                    "inside": inside,
+                    "y_diff": nearest.get("y_diff"),
+                    "proximity": proximity,
+                    "target_index": None if nearest_index is None else nearest_index + 1,
+                }
+            else:
+                raw = ((raw_final_states or {}).get(color) or {})
+                states[color] = {
+                    "used_set": raw.get("used_set", "-"),
+                    "source": raw.get("source", "NO DATA"),
+                    "current": raw.get("current"),
+                    "target": None,
+                    "distance": None,
+                    "inside": False,
+                    "y_diff": raw.get("y_diff"),
+                    "proximity": 0.0,
+                    "target_index": None,
+                }
+
+        return states
+
 
     def _target_distance_for_color(self, color_current, slot):
         best = None
@@ -359,14 +451,18 @@ class GameEngine:
             cur = color_current.get(set_name)
             if not cur:
                 continue
-            distance = float(np.linalg.norm(cur["point"] - target))
+            cur_point = self._valid_point(cur.get("point"))
+            target_point = self._valid_point(target)
+            if cur_point is None or target_point is None:
+                continue
+            distance = float(np.linalg.norm(cur_point - target_point))
             if best is None or distance < best["distance"]:
                 best = {
                     "distance": distance,
                     "used_set": set_name,
-                    "source": cur["source"],
-                    "current": cur["point"],
-                    "target": target,
+                    "source": cur.get("source", "NO DATA"),
+                    "current": cur_point,
+                    "target": target_point,
                     "y_diff": cur.get("y_diff"),
                 }
         return best
@@ -407,7 +503,51 @@ class GameEngine:
         walk(0, set(), {}, 0.0)
         return best["assignment"]
 
-    def _color_agnostic_colors(self, target_slots, current_by_color):
+    def _claim_color_target_assignment(self, distance_matrix, target_claims):
+        claims = {}
+        for target_index, color in (target_claims or {}).items():
+            try:
+                target_index = int(target_index)
+            except (TypeError, ValueError):
+                continue
+            if color in COLOR_ORDER and 0 <= target_index < len(distance_matrix):
+                claims[target_index] = color
+
+        assignment = {}
+        used_colors = set()
+        release_distance = self._clear_dist * 1.25
+
+        for target_index, color in list(claims.items()):
+            distance = distance_matrix[target_index].get(color)
+            if distance is None or distance > release_distance or color in used_colors:
+                claims.pop(target_index, None)
+                continue
+            if distance <= self._clear_dist:
+                assignment[color] = target_index
+                used_colors.add(color)
+
+        candidates = []
+        for target_index, row in enumerate(distance_matrix):
+            if target_index in claims:
+                continue
+            for color, distance in row.items():
+                if color in used_colors or distance > self._clear_dist:
+                    continue
+                candidates.append((distance, target_index, color))
+
+        for distance, target_index, color in sorted(candidates, key=lambda item: item[0]):
+            if target_index in claims or color in used_colors:
+                continue
+            claims[target_index] = color
+            assignment[color] = target_index
+            used_colors.add(color)
+
+        if target_claims is not None:
+            target_claims.clear()
+            target_claims.update(claims)
+        return assignment, claims
+
+    def _color_agnostic_colors(self, target_slots, current_by_color, target_claims=None):
         colors = {}
         distance_matrix = []
         details_by_target = []
@@ -423,7 +563,7 @@ class GameEngine:
             distance_matrix.append(row)
             details_by_target.append(details)
 
-        assignment = self._solve_color_target_assignment(distance_matrix)
+        assignment, claims = self._claim_color_target_assignment(distance_matrix, target_claims)
         assigned_by_color = {color: target_index for color, target_index in assignment.items()}
         max_distance = max(self._clear_dist * 3.0, 1.0)
 
@@ -431,6 +571,8 @@ class GameEngine:
             nearest = None
             nearest_index = None
             for target_index, details in enumerate(details_by_target):
+                if claims.get(target_index) not in (None, color):
+                    continue
                 detail = details.get(color)
                 if detail is None:
                     continue
@@ -474,9 +616,12 @@ class GameEngine:
         if set_a is None:
             target_slots = self._target_slots_from_pose_sets(sets)
             ctx["target_slots"] = target_slots
+            ctx["target_claims"] = {}
             ctx["targets_set"] = bool(target_slots)
             ctx["current_pose_name"] = pose.get("name", "Saved pose")
             ctx["current_pose_difficulty"] = pose.get("difficulty", self._settings.get("difficulty", "medium"))
+            ctx["current_pose_photo"] = pose.get("setup_photo")
+            ctx["current_pose_photos"] = pose.get("setup_photos") or {}
             ctx["message"] = (
                 f"Loaded pose: {ctx['current_pose_name']}"
                 if target_slots
@@ -503,9 +648,12 @@ class GameEngine:
         self._configure_core()
 
         ctx["target_slots"] = target_slots
+        ctx["target_claims"] = {}
         ctx["targets_set"] = bool(target_slots)
         ctx["current_pose_name"] = pose.get("name", "Saved pose")
         ctx["current_pose_difficulty"] = difficulty
+        ctx["current_pose_photo"] = pose.get("setup_photo")
+        ctx["current_pose_photos"] = pose.get("setup_photos") or {}
         ctx["game_state"] = GameState.IDLE
         ctx["pose_result"] = None
         ctx["all_inside_t"] = None
@@ -518,13 +666,7 @@ class GameEngine:
 
     def _update_current_pose_cache(self, set_a=None, set_b=None, colors=None):
         if set_a is None:
-            sets = {
-                "SIM": {
-                    color: colors[color]["current"]
-                    for color in COLOR_ORDER
-                    if colors and colors.get(color, {}).get("current") is not None
-                }
-            }
+            sets = {"A": {}, "B": {}}
         else:
             sets = {"A": {}, "B": {}}
             for color in COLOR_ORDER:
@@ -532,16 +674,55 @@ class GameEngine:
                 if set_b is not None:
                     sets["B"][color] = _vec_to_list(set_b.states[color].get("current_point"))
 
+        target_points = []
+        for set_name, set_points in sets.items():
+            if not isinstance(set_points, dict):
+                continue
+            for color in COLOR_ORDER:
+                point = set_points.get(color)
+                if point is not None:
+                    target_points.append({
+                        "set": set_name,
+                        "source_color": color,
+                        "point": point,
+                    })
+
         with self._lock:
             self._current_pose = {
                 "sets": sets,
+                "target_points": target_points,
+                "target_point_count": len(target_points),
                 "captured_at": time.time(),
-                "source": "simulation" if set_a is None else "live",
+                "source": "live",
             }
+
+    def _camera_health_error(self, set_b, use_b_set, use_remote_b_set):
+        if not use_b_set:
+            return "B camera set is disabled. Four cameras are required for live play."
+        if set_b is None:
+            return "B camera set is not available. Four cameras are required for live play."
+        if use_remote_b_set and hasattr(set_b, "latest_receive_time"):
+            age = time.time() - set_b.latest_receive_time if set_b.latest_receive_time > 0 else 999.0
+            if age > 1.5:
+                return "No live data from B cameras. Start the sub PC sender and check the UDP port."
+        return None
+
+    def _camera_health_status(self, error):
+        status = {"cam0": True, "cam1": True, "cam2": True, "cam3": True}
+        if error:
+            status["cam2"] = False
+            status["cam3"] = False
+        return status
 
     def _process_commands(self, commands, ctx, set_a=None, set_b=None):
         for cmd, data in commands:
             if cmd == "start_game":
+                camera_status = ctx.get("camera_status") or {}
+                front_missing = camera_status.get("cam0") is False or camera_status.get("cam1") is False
+                if ctx.get("camera_error") and (front_missing or not (data or {}).get("allow_camera_warning")):
+                    ctx["message"] = "Camera error. Check all four cameras before starting."
+                    continue
+
                 if data:
                     self._settings.update(data)
                     self._apply_settings(self._settings)
@@ -568,12 +749,8 @@ class GameEngine:
                 ctx["message"] = "Origin is implicit in the saved A/B target coordinates."
 
             elif cmd == "set_targets":
-                if set_a is None:
-                    ctx["targets_set"] = True
-                    ctx["target_slots"] = []
-                    ctx["current_pose_name"] = "Manual simulation pose"
-                    ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
-                    ctx["message"] = "Simulation target pose saved. Press START."
+                if ctx.get("camera_error"):
+                    ctx["message"] = "Camera error. Target pose was not saved."
                     continue
 
                 saved_a, missing_a = set_a.set_targets_from_current()
@@ -584,6 +761,7 @@ class GameEngine:
                 target_slots = self._target_slots_from_current_targets(set_a, set_b)
 
                 ctx["target_slots"] = target_slots
+                ctx["target_claims"] = {}
                 ctx["targets_set"] = bool(target_slots)
                 ctx["game_state"] = GameState.IDLE
                 ctx["pose_result"] = None
@@ -592,6 +770,8 @@ class GameEngine:
                 if target_slots:
                     ctx["current_pose_name"] = "Manual target pose"
                     ctx["current_pose_difficulty"] = self._settings.get("difficulty", "medium")
+                    ctx["current_pose_photos"] = self._capture_snapshots()
+                    ctx["current_pose_photo"] = ctx["current_pose_photos"].get("cam0")
                     ctx["message"] = f"{len(target_slots)} target points saved. Press START."
                 else:
                     ctx["message"] = "No visible target points were saved."
@@ -615,6 +795,7 @@ class GameEngine:
 
                 ctx["targets_set"] = False
                 ctx["target_slots"] = []
+                ctx["target_claims"] = {}
                 ctx["all_inside_t"] = None
                 ctx["hold_progress"] = 0.0
                 if set_a is not None:
@@ -662,7 +843,8 @@ class GameEngine:
             )
         )
         ctx["all_inside"] = all_inside
-        ctx["time_left"] = self._time_per_pose
+        ctx["time_left"] = None if self._no_time_limit else self._time_per_pose
+        ctx["elapsed_time"] = 0.0
         ctx["hold_progress"] = 0.0
 
         if ctx["game_state"] == GameState.COUNTDOWN:
@@ -682,7 +864,8 @@ class GameEngine:
 
         elif ctx["game_state"] == GameState.PLAYING:
             elapsed = now - ctx.get("pose_start_t", now)
-            time_left = max(0.0, self._time_per_pose - elapsed)
+            ctx["elapsed_time"] = elapsed
+            time_left = None if self._no_time_limit else max(0.0, self._time_per_pose - elapsed)
             ctx["time_left"] = time_left
 
             if all_inside:
@@ -699,7 +882,7 @@ class GameEngine:
                     ctx["poses_cleared_total"] += 1
                     ctx["game_state"] = GameState.POSE_CLEAR
                     ctx["message"] = "POSE CLEAR. Tap NEXT when ready."
-                    speed_bonus = max(0, int((time_left / self._time_per_pose) * 50))
+                    speed_bonus = 0 if self._no_time_limit else max(0, int((time_left / self._time_per_pose) * 50))
                     points = 100 * ctx["round"] + speed_bonus
                     if current_player:
                         ctx["scores"][current_player] = ctx["scores"].get(current_player, 0) + points
@@ -714,9 +897,9 @@ class GameEngine:
                 )
 
             if (
-                time_left <= 0
+                not self._no_time_limit
+                and time_left <= 0
                 and ctx["game_state"] == GameState.PLAYING
-                and not self._settings.get("vs_no_timeout")
             ):
                 ctx["pose"] += 1
                 ctx["pose_result"] = "timeout"
@@ -741,6 +924,10 @@ class GameEngine:
             "result": ctx.get("pose_result", "unknown"),
             "round": ctx["round"],
             "pose": ctx["pose"],
+            "elapsed_time": ctx.get("elapsed_time", 0.0),
+            "setup_photo": ctx.get("current_pose_photo"),
+            "setup_photos": ctx.get("current_pose_photos", {}),
+            "pose_name": ctx.get("current_pose_name"),
         }
         with self._lock:
             self._snapshot_event = event
@@ -774,9 +961,13 @@ class GameEngine:
             }
         return colors
 
-
     def _make_multi_ble_feedbacks(self, core):
-        """Create one BLE feedback controller per PoseRing color."""
+        """Create one BLE feedback controller per PoseRing color.
+
+        This is the safe first integration step: connect to 4 rings, send OFF at
+        startup/shutdown, and publish connection status. It intentionally does
+        not change game judging or distance feedback yet.
+        """
         char_uuid = self._settings.get("ble_char_uuid", core.BLE_LED_CHAR_UUID)
         device_names = {
             "RED": os.getenv("POSERING_BLE_RED", self._settings.get("ble_red_device_name", "PoseRing_RED")),
@@ -789,183 +980,12 @@ class GameEngine:
         for color, device_name in device_names.items():
             controller = core.BleFeedbackController(device_name, char_uuid)
             controller.start()
-            try:
-                controller.set_state(core.BleFeedbackController.STATE_OFF)
-            except Exception:
-                pass
+            controller.set_state(core.BleFeedbackController.STATE_OFF)
             feedbacks[color] = controller
         return feedbacks
 
     def _is_live_marker_source(self, source):
-        return source in ["A_LIVE", "B_LIVE", "SIM"]
-
-    def _target_distance_for_color_ble(self, color_current, slot, *, allow_sources=None):
-        """Return nearest valid target distance for BLE feedback.
-
-        Unlike the game judging path, this intentionally ignores LAST_USED data.
-        This fixes the case where a marker is hidden from A but visible from B:
-        the BLE ring must follow the B_LIVE distance instead of seeing stale A
-        coordinates and turning off.
-        """
-        best = None
-        allow_sources = set(allow_sources or ["A_LIVE", "B_LIVE", "SIM"])
-        for set_name, target in (slot.get("points", {}) or {}).items():
-            cur = (color_current or {}).get(set_name)
-            if not cur:
-                continue
-            source = cur.get("source")
-            if source not in allow_sources:
-                continue
-            try:
-                cur_point = np.array(cur.get("point"), dtype=np.float64).reshape(-1)[:3]
-                target_point = np.array(target, dtype=np.float64).reshape(-1)[:3]
-            except (TypeError, ValueError):
-                continue
-            if cur_point.size < 3 or target_point.size < 3:
-                continue
-            if not (np.all(np.isfinite(cur_point)) and np.all(np.isfinite(target_point))):
-                continue
-            distance = float(np.linalg.norm(cur_point - target_point))
-            if best is None or distance < best["distance"]:
-                best = {
-                    "distance": distance,
-                    "used_set": set_name,
-                    "source": source,
-                    "current": cur_point,
-                    "target": target_point,
-                    "y_diff": cur.get("y_diff"),
-                }
-        return best
-
-    def _nearest_target_ble_states_with_occupancy(self, target_slots, current_by_color, raw_final_states=None, ble_claims=None):
-        """Calculate per-ring BLE feedback using A/B live coordinates.
-
-        Game clear judging remains color-agnostic. This function is only for LED
-        feedback. If one color occupies a goal, that goal is hidden from other
-        colors, so later entrants are guided to the next nearest unoccupied goal
-        instead of blinking on the already occupied one.
-        """
-        ble_claims = ble_claims if ble_claims is not None else {}
-        release_distance = float(self._clear_dist * 1.35)
-        max_distance = max(self._clear_dist * 3.0, 1.0)
-        target_slots = list(target_slots or [])
-
-        # Precompute live-only distance details: target_index -> color -> detail.
-        details_by_target = []
-        for slot in target_slots:
-            details = {}
-            for color in COLOR_ORDER:
-                detail = self._target_distance_for_color_ble(
-                    (current_by_color or {}).get(color, {}),
-                    slot,
-                    allow_sources=["A_LIVE", "B_LIVE", "SIM"],
-                )
-                if detail is not None:
-                    details[color] = detail
-            details_by_target.append(details)
-
-        # Normalize and release old claims when the owner is gone or far enough.
-        claims = {}
-        for target_index, owner in list((ble_claims or {}).items()):
-            try:
-                target_index = int(target_index)
-            except (TypeError, ValueError):
-                continue
-            if owner not in COLOR_ORDER or not (0 <= target_index < len(details_by_target)):
-                continue
-            detail = details_by_target[target_index].get(owner)
-            if detail is None or detail["distance"] > release_distance:
-                continue
-            claims[target_index] = owner
-
-        # Existing owners keep their goals. Then free goals can be claimed by the
-        # nearest unused live color inside the clear distance.
-        used_colors = set(claims.values())
-        candidates = []
-        for target_index, details in enumerate(details_by_target):
-            if target_index in claims:
-                continue
-            for color, detail in details.items():
-                if color in used_colors:
-                    continue
-                if detail["distance"] <= self._clear_dist:
-                    candidates.append((detail["distance"], target_index, color))
-
-        for _distance, target_index, color in sorted(candidates, key=lambda item: item[0]):
-            if target_index in claims or color in used_colors:
-                continue
-            claims[target_index] = color
-            used_colors.add(color)
-
-        if ble_claims is not None:
-            ble_claims.clear()
-            ble_claims.update(claims)
-
-        states = {}
-        for color in COLOR_ORDER:
-            nearest = None
-            nearest_index = None
-            owned_index = None
-            for target_index, owner in claims.items():
-                if owner == color:
-                    owned_index = target_index
-                    break
-
-            # If this color owns a goal, keep using that goal so it continues to blink.
-            if owned_index is not None:
-                nearest = details_by_target[owned_index].get(color)
-                nearest_index = owned_index
-
-            # Otherwise choose nearest goal that is not occupied by another color.
-            if nearest is None:
-                for target_index, details in enumerate(details_by_target):
-                    owner = claims.get(target_index)
-                    if owner is not None and owner != color:
-                        continue
-                    detail = details.get(color)
-                    if detail is None:
-                        continue
-                    if nearest is None or detail["distance"] < nearest["distance"]:
-                        nearest = detail
-                        nearest_index = target_index
-
-            if nearest is not None:
-                distance = nearest["distance"]
-                inside = bool(
-                    nearest_index is not None
-                    and claims.get(nearest_index) == color
-                    and distance <= self._clear_dist
-                )
-                proximity = max(0.0, min(1.0, 1.0 - distance / max_distance))
-                states[color] = {
-                    "used_set": nearest.get("used_set", "-"),
-                    "source": nearest.get("source", "NO DATA"),
-                    "current": nearest.get("current"),
-                    "target": nearest.get("target"),
-                    "distance": distance,
-                    "inside": inside,
-                    "y_diff": nearest.get("y_diff"),
-                    "proximity": proximity,
-                    "target_index": None if nearest_index is None else nearest_index + 1,
-                    "occupied_by": claims.get(nearest_index) if nearest_index is not None else None,
-                    "ble_claims": {str(k + 1): v for k, v in claims.items()},
-                }
-            else:
-                raw = ((raw_final_states or {}).get(color) or {})
-                states[color] = {
-                    "used_set": raw.get("used_set", "-"),
-                    "source": raw.get("source", "NO DATA"),
-                    "current": raw.get("current"),
-                    "target": None,
-                    "distance": None,
-                    "inside": False,
-                    "y_diff": raw.get("y_diff"),
-                    "proximity": 0.0,
-                    "target_index": None,
-                    "occupied_by": None,
-                    "ble_claims": {str(k + 1): v for k, v in claims.items()},
-                }
-        return states
+        return source in ["A_LIVE", "B_LIVE"]
 
     def _update_multi_ble_status_connect_only(self, core, feedbacks):
         if not feedbacks:
@@ -990,6 +1010,13 @@ class GameEngine:
             }
 
     def _update_multi_ble_visible_white(self, core, feedbacks, final_states):
+        """Stage 3-B: visible marker -> white, missing marker -> off.
+
+        This intentionally does not use distance or target assignment yet, so it
+        should not affect the camera/game judging path. It only looks at whether
+        each color was detected live by A/B cameras, and sends 1 or 0 to that
+        color's bracelet.
+        """
         if not feedbacks:
             with self._lock:
                 self._ble_status = {"enabled": False, "mode": "multi_visible_white"}
@@ -999,7 +1026,11 @@ class GameEngine:
         for color, controller in feedbacks.items():
             fs = (final_states or {}).get(color, {})
             visible = bool(fs.get("current") is not None and self._is_live_marker_source(fs.get("source")))
-            value = core.BleFeedbackController.STATE_CONNECTED_WHITE if visible else core.BleFeedbackController.STATE_OFF
+            value = (
+                core.BleFeedbackController.STATE_CONNECTED_WHITE
+                if visible
+                else core.BleFeedbackController.STATE_OFF
+            )
             try:
                 controller.set_state(value)
             except Exception:
@@ -1021,88 +1052,106 @@ class GameEngine:
             }
 
     def _update_multi_ble_distance_feedback(self, core, ctx, feedbacks, final_states):
-        """Send per-color distance feedback to each physical ring.
+        """Stage 3-C/4: send BLE feedback to each color's own ring.
 
-        Uses final_states prepared by _nearest_target_ble_states_with_occupancy(),
-        so A-hidden/B-live markers still receive B-set distance feedback.
+        Game judging remains color-agnostic. This function only chooses the BLE
+        value for each physical color ring:
+          - not visible: 0
+          - visible but not playing / no target: 1
+          - playing and has nearest target distance: 2..249
+          - inside goal: 250
+          - POSE_CLEAR: RED gets 251 once, then connected rings get 252
+
+        It deliberately avoids doing any new geometry calculation here; it uses
+        the already computed final_states/colors data so the live camera path is
+        less likely to be affected.
         """
         if not feedbacks:
             with self._lock:
                 self._ble_status = {"enabled": False, "mode": "multi_distance_feedback"}
             return
 
-        # POSE_CLEAR: RED gets 251 once for sound. Connected rings then get 252.
-        if ctx.get("game_state") == GameState.POSE_CLEAR:
-            clear_key = (ctx.get("round"), ctx.get("pose"), ctx.get("current_pose_name"))
+        # Stage 4: clear feedback.
+        # RED receives 251 once for the sound. Connected rings then receive 252
+        # so each Arduino keeps its own color at maximum after clear.
+        clear_now = bool(ctx.get("game_state") == GameState.POSE_CLEAR and ctx.get("pose_result") == "cleared")
+        if clear_now:
+            clear_key = (ctx.get("round"), ctx.get("pose"), ctx.get("poses_cleared_total"))
             if ctx.get("multi_ble_clear_key") != clear_key:
                 ctx["multi_ble_clear_key"] = clear_key
                 ctx["multi_ble_clear_sound_sent"] = False
 
             rings = {}
             for color, controller in feedbacks.items():
-                value = 252
-                reason = "clear_solid"
                 if color == "RED" and not ctx.get("multi_ble_clear_sound_sent", False):
                     value = 251
-                    reason = "clear_sound"
+                    reason = "clear_sound_red_only"
                     ctx["multi_ble_clear_sound_sent"] = True
+                else:
+                    value = 252
+                    reason = "clear_latch_max_color"
+
                 try:
                     controller.set_state(value)
                 except Exception:
                     pass
-                fs = (final_states or {}).get(color, {}) or {}
+
                 rings[color] = {
                     "device": controller.device_name,
                     "connected": bool(controller.is_connected),
-                    "visible": bool(fs.get("current") is not None),
-                    "source": fs.get("source", "NO DATA"),
+                    "visible": bool(((final_states or {}).get(color, {}) or {}).get("current") is not None),
+                    "source": ((final_states or {}).get(color, {}) or {}).get("source", "NO DATA"),
+                    "distance": None,
+                    "inside": True,
                     "value": int(value),
                     "reason": reason,
-                    "distance": None,
-                    "target_index": fs.get("target_index"),
                 }
+
             with self._lock:
                 self._ble_status = {
                     "enabled": True,
                     "mode": "multi_distance_feedback",
                     "connected": any(r["connected"] for r in rings.values()),
+                    "playing": False,
+                    "clear": True,
                     "rings": rings,
                 }
             return
         else:
-            ctx["multi_ble_clear_key"] = None
-            ctx["multi_ble_clear_sound_sent"] = False
+            # Allow the next cleared pose to fire the RED sound again.
+            if ctx.get("game_state") not in (GameState.POSE_CLEAR,):
+                ctx["multi_ble_clear_key"] = None
+                ctx["multi_ble_clear_sound_sent"] = False
 
+        playing = bool(ctx.get("game_state") == GameState.PLAYING and ctx.get("targets_set", False))
         rings = {}
+
         for color, controller in feedbacks.items():
-            fs = (final_states or {}).get(color, {}) or {}
+            fs = (final_states or {}).get(color, {})
             visible = bool(fs.get("current") is not None and self._is_live_marker_source(fs.get("source")))
             distance = fs.get("distance")
+            inside = bool(fs.get("inside", False))
 
             if not visible:
                 value = core.BleFeedbackController.STATE_OFF
                 reason = "not_visible"
-            elif ctx.get("game_state") != GameState.PLAYING or not ctx.get("targets_set", False):
+            elif not playing:
                 value = core.BleFeedbackController.STATE_CONNECTED_WHITE
                 reason = "visible_not_playing"
             elif distance is None:
                 value = core.BleFeedbackController.STATE_CONNECTED_WHITE
                 reason = "visible_no_distance"
-            elif fs.get("inside", False):
+            elif inside:
                 value = 250
-                reason = "inside_own_goal"
+                reason = "inside_goal"
             else:
-                # core.distance_to_red_brightness() returns None when the marker
-                # is farther than FEEDBACK_MAX_DISTANCE_MM.  Passing that None to
-                # int() was crashing the live loop and switching the game into
-                # simulation mode.  Treat that case as visible-but-too-far: keep
-                # the ring white instead of sending a distance brightness.
                 brightness = core.distance_to_red_brightness(distance)
                 if brightness is None:
                     value = core.BleFeedbackController.STATE_CONNECTED_WHITE
-                    reason = "visible_too_far"
+                    reason = "too_far"
                 else:
-                    value = max(2, min(249, int(brightness)))
+                    # Keep 250 reserved for goal/inside. Arduino treats >=250 as goal.
+                    value = max(core.BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE, min(249, int(brightness)))
                     reason = "distance_feedback"
 
             try:
@@ -1115,14 +1164,10 @@ class GameEngine:
                 "connected": bool(controller.is_connected),
                 "visible": visible,
                 "source": fs.get("source", "NO DATA"),
-                "used_set": fs.get("used_set", "-"),
+                "distance": None if distance is None else float(distance),
+                "inside": inside,
                 "value": int(value),
                 "reason": reason,
-                "distance": None if distance is None else float(distance),
-                "inside": bool(fs.get("inside", False)),
-                "target_index": fs.get("target_index"),
-                "occupied_by": fs.get("occupied_by"),
-                "ble_claims": fs.get("ble_claims"),
             }
 
         with self._lock:
@@ -1130,6 +1175,8 @@ class GameEngine:
                 "enabled": True,
                 "mode": "multi_distance_feedback",
                 "connected": any(r["connected"] for r in rings.values()),
+                "playing": playing,
+                "clear": False,
                 "rings": rings,
             }
 
@@ -1209,12 +1256,24 @@ class GameEngine:
         b_calib = self._settings.get("b_calib_file") or core.B_CALIB_FILE
         use_b_set = bool(self._settings.get("use_b_set", core.USE_B_SET))
         use_remote_b_set = bool(self._settings.get("use_remote_b_set", core.USE_REMOTE_B_SET))
+        a_cam0_index = int(self._settings.get("a_cam0_index", core.A_CAM0_INDEX))
+        a_cam1_index = int(self._settings.get("a_cam1_index", core.A_CAM1_INDEX))
+        if a_cam0_index <= 0 or a_cam1_index <= 0:
+            raise RuntimeError(
+                "Invalid main camera index. Camera index 0 is reserved for the built-in laptop camera "
+                "and is not allowed. Connect two external USB cameras and use indexes 1 and 2 or higher."
+            )
+        if not use_b_set or not use_remote_b_set:
+            raise RuntimeError(
+                "Invalid camera mode. PoseRing web app requires two main USB cameras plus two remote "
+                "sub-PC cameras over UDP. Local B cameras, OBS, iPhone, and laptop cameras are not allowed."
+            )
 
         set_a = core.StereoSet(
             "A",
             a_calib,
-            int(self._settings.get("a_cam0_index", core.A_CAM0_INDEX)),
-            int(self._settings.get("a_cam1_index", core.A_CAM1_INDEX)),
+            a_cam0_index,
+            a_cam1_index,
             self._settings.get("a_backend", core.A_BACKEND),
         )
 
@@ -1237,8 +1296,8 @@ class GameEngine:
 
         ble_feedback = None
         multi_ble_feedbacks = None
-        ble_mode = os.getenv("POSERING_BLE_MODE", self._settings.get("ble_mode", "single")).strip().lower()
         if bool(self._settings.get("ble_enabled", core.ENABLE_XIAO_BLE)):
+            ble_mode = os.getenv("POSERING_BLE_MODE", self._settings.get("ble_mode", "single")).strip().lower()
             if ble_mode in ["multi", "multi_connect", "multi_connect_only", "multi_visible", "multi_visible_white", "multi_stage_white", "multi_distance", "multi_distance_feedback"]:
                 multi_ble_feedbacks = self._make_multi_ble_feedbacks(core)
                 self._update_multi_ble_status_connect_only(core, multi_ble_feedbacks)
@@ -1252,12 +1311,16 @@ class GameEngine:
         ctx = self._make_context()
         last_used = {color: None for color in COLOR_ORDER}
         last_target_live_time = None
+        camera_check_started = time.time()
 
         try:
             while self._running:
                 set_a.read_and_process()
                 if set_b is not None:
                     set_b.read_and_process()
+                if time.time() - camera_check_started >= 2.5:
+                    ctx["camera_error"] = self._camera_health_error(set_b, use_b_set, use_remote_b_set)
+                    ctx["camera_status"] = self._camera_health_status(ctx["camera_error"])
 
                 self._process_commands(self._pop_commands(), ctx, set_a, set_b)
 
@@ -1270,20 +1333,23 @@ class GameEngine:
 
                 if ctx.get("target_slots"):
                     target_slots = ctx.get("target_slots") or []
-                    colors = self._color_agnostic_colors(target_slots, current_by_color)
-                    # BLE feedback uses live A/B coordinates independently from
-                    # the game assignment. Other colors cannot see a goal that is
-                    # already occupied for BLE blinking, but B_LIVE coordinates are
-                    # still used when A is hidden.
-                    ble_states = self._nearest_target_ble_states_with_occupancy(
+                    colors = self._color_agnostic_colors(
+                        target_slots,
+                        current_by_color,
+                        ctx.setdefault("target_claims", {}),
+                    )
+                    # BLE feedback is intentionally independent from color-agnostic
+                    # target assignment. Each physical ring should react to its own
+                    # nearest goal, even if that goal is currently claimed by another
+                    # color for game-clear judging.
+                    ble_states = self._nearest_target_ble_states(
+                        core,
                         target_slots,
                         current_by_color,
                         raw_final_states,
-                        ctx.setdefault("ble_target_claims", {}),
                     )
                 else:
                     colors = self._colors_from_final(raw_final_states)
-                    ctx.setdefault("ble_target_claims", {}).clear()
                 self._update_current_pose_cache(set_a, set_b)
                 self._tick_game(ctx, colors)
                 if multi_ble_feedbacks is not None:
@@ -1325,53 +1391,3 @@ class GameEngine:
             set_a.release()
             if set_b is not None:
                 set_b.release()
-
-    def _run_simulation(self):
-        ctx = self._make_context()
-        last_snapshot_state = None
-        with self._frame_lock:
-            self._jpeg[0] = _encode_jpeg(_blank_frame("SIM A CAM 0", height=480))
-            self._jpeg[1] = _encode_jpeg(_blank_frame("SIM A CAM 1", height=480))
-            self._jpeg[2] = _encode_jpeg(_blank_frame("SIM B CAM 0", height=480))
-            self._jpeg[3] = _encode_jpeg(_blank_frame("SIM B CAM 1", height=480))
-
-        while self._running:
-            self._process_commands(self._pop_commands(), ctx)
-
-            now = time.time()
-            colors = {}
-            for i, color in enumerate(COLOR_ORDER):
-                distance = 180.0 + 180.0 * np.sin(now * 0.7 + i * 1.8)
-                inside = bool(distance <= self._clear_dist)
-                colors[color] = {
-                    "status": "OK" if inside else ("CLOSE" if distance <= self._clear_dist * 2 else "FAR"),
-                    "distance": float(abs(distance)),
-                    "inside": inside,
-                    "source": "SIM",
-                    "used_set": "SIM",
-                    "proximity": max(0.0, min(1.0, 1.0 - abs(distance) / (self._clear_dist * 3.0))),
-                    "target": [100.0 * i, 50.0, 200.0],
-                    "current": [100.0 * i + distance, 50.0, 200.0],
-                    "y_diff": 0.0,
-                }
-
-            if ctx.get("target_slots"):
-                colors = self._color_agnostic_colors(
-                    ctx.get("target_slots") or [],
-                    self._current_points_from_color_state(colors),
-                )
-
-            self._tick_game(ctx, colors)
-            self._update_current_pose_cache(colors=colors)
-            self._ble_status = {"enabled": False, "simulation": True}
-
-            if ctx["game_state"] in (GameState.POSE_CLEAR, GameState.TIME_UP):
-                marker = (ctx["game_state"], ctx["round"], ctx["pose"])
-                if marker != last_snapshot_state:
-                    self._queue_snapshot(ctx)
-                    last_snapshot_state = marker
-            else:
-                last_snapshot_state = None
-
-            self._publish(ctx, colors)
-            time.sleep(0.05)

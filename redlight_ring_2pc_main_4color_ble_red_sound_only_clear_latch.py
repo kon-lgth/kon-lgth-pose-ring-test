@@ -94,8 +94,28 @@ REMOTE_B_UDP_PORT = 5005
 ENABLE_XIAO_BLE = True
 
 # デバイス側ArduinoコードのBLE名・Characteristic UUIDと一致させる
-BLE_DEVICE_NAME = "PoseRing_YELLOW"
+# 4台それぞれ、Arduino側の DEVICE_NAME と一致させる。
+BLE_DEVICE_NAMES = {
+    "RED": "PoseRing_RED",
+    "YELLOW": "PoseRing_YELLOW",
+    "BLUE": "PoseRing_BLUE",
+    "GREEN": "PoseRing_GREEN",
+}
 BLE_LED_CHAR_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
+
+# Arduino側コマンド値
+#   0     = OFF
+#   1     = WHITE
+#   2-249 = 距離に応じたフィードバック
+#   250   = ゴール内の点滅
+#   251   = ALL CLEAR効果音を鳴らす（赤マイコンのみ）
+#   252   = ALL CLEAR後、そのリング自身の色で最大点灯を維持
+BLE_GOAL_BLINK_VALUE = 250
+BLE_CLEAR_SOUND_VALUE = 251
+BLE_CLEAR_SOLID_MAX_VALUE = 252
+BLE_CLEAR_SOUND_TARGET_COLOR = "RED"
+BLE_CLEAR_LED_HOLD_SEC = 2.0
+BLE_CLEAR_SOUND_HOLD_SEC = 0.25
 
 # True : 対象色が今フレームでLIVE検出され、かつゴール内のときだけLED反応
 # False: 一時的な見失い時のLAST_USED判定でもLED反応を維持する
@@ -115,12 +135,10 @@ STAGE_VISIBLE_REQUIRES_LIVE = True
 # ただし、この猶予時間を超えて見えなければステージ外扱いで消灯する。
 STAGE_LOST_GRACE_SEC = 1.0
 
-# BLEで反応させる判定対象の色
-FEEDBACK_TARGET_COLOR = "RED"
-
 # 距離に応じた赤LED輝度フィードバック設定
+# 250以上はArduino側で特殊コマンドとして使うため、通常の明るさは249までにする。
 FEEDBACK_MIN_RED_BRIGHTNESS = 20
-FEEDBACK_MAX_RED_BRIGHTNESS = 255
+FEEDBACK_MAX_RED_BRIGHTNESS = 249
 
 # 表示設定
 DISPLAY_MIRROR = True
@@ -151,17 +169,17 @@ A_BACKEND = "DEFAULT"
 B_BACKEND = "DSHOW"
 
 # 判定設定
-CLEAR_DISTANCE_MM = 400.0
+CLEAR_DISTANCE_MM = 390.0
 HOLD_TIME_SEC = 2.0
 
 # CLEAR_DISTANCE_MM=390なら、1170mm以内から赤くなり始める
-FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 1.2
+FEEDBACK_MAX_DISTANCE_MM = CLEAR_DISTANCE_MM * 3.0
 
 # 色を見失った時、最後の判定情報を使い続ける最大時間
 LOST_HOLD_SEC = 0.7
 
 # 色領域の最小面積
-MIN_AREA = 10
+MIN_AREA = 40
 
 kernel = np.ones((5, 5), np.uint8)
 
@@ -169,24 +187,20 @@ kernel = np.ones((5, 5), np.uint8)
 # HSV設定
 # 照明や素材に合わせて調整する
 # =========================
-
-# 赤：少し緩める。暗め・薄めの赤も拾いやすくする
-LOWER_RED_1 = np.array([0, 160, 80])
+LOWER_RED_1 = np.array([0, 120, 50])
 UPPER_RED_1 = np.array([10, 255, 255])
-LOWER_RED_2 = np.array([170, 160, 80])
+LOWER_RED_2 = np.array([170, 120, 50])
 UPPER_RED_2 = np.array([179, 255, 255])
 
-# 黄色：少し緩める。現在より暗い黄色・薄い黄色も拾う
-LOWER_YELLOW = np.array([18, 80, 70])
-UPPER_YELLOW = np.array([40, 255, 255])
+LOWER_YELLOW = np.array([20, 80, 80])
+UPPER_YELLOW = np.array([35, 255, 255])
 
-# 青：少し緩める。影だけ拾う場合はV下限を下げすぎない
-LOWER_BLUE = np.array([90, 55, 45])
+LOWER_BLUE = np.array([95, 150, 50])
 UPPER_BLUE = np.array([130, 255, 255])
 
-# 緑：少し緩める。濃い緑・暗い緑を拾いやすくする
-LOWER_GREEN = np.array([30, 25, 10])
-UPPER_GREEN = np.array([105, 255, 245])
+LOWER_GREEN = np.array([40, 60, 50])
+UPPER_GREEN = np.array([85, 255, 255])
+
 COLOR_ORDER = ["RED", "YELLOW", "BLUE", "GREEN"]
 
 COLOR_CONFIGS = {
@@ -579,12 +593,16 @@ class BleFeedbackController:
     送信値:
       0       = OFF / 終了時・切断前
       1       = BLE接続中の待機表示（白色）
-      2-255   = 赤色LEDの輝度値
+      2-249   = 赤色LEDの輝度値
+      250     = ゴール内の点滅
+      251     = ALL CLEAR効果音再生（赤のみ）
+      252     = ALL CLEAR後、そのリング自身の色で最大点灯を維持
     """
 
     STATE_OFF = 0
     STATE_CONNECTED_WHITE = 1
     MIN_RED_BRIGHTNESS_VALUE = 2
+    MAX_RED_BRIGHTNESS_VALUE = 249
 
     def __init__(self, device_name, char_uuid, scan_timeout=8.0):
         self.device_name = device_name
@@ -640,7 +658,12 @@ class BleFeedbackController:
         if brightness is None or brightness <= 0:
             self.set_state(self.STATE_CONNECTED_WHITE)
         else:
-            self.set_state(max(self.MIN_RED_BRIGHTNESS_VALUE, min(255, int(brightness))))
+            self.set_state(
+                max(
+                    self.MIN_RED_BRIGHTNESS_VALUE,
+                    min(self.MAX_RED_BRIGHTNESS_VALUE, int(brightness)),
+                )
+            )
 
     def _thread_main(self):
         asyncio.run(self._async_main())
@@ -1276,8 +1299,7 @@ def main():
     print(f"REMOTE_B_UDP_IP: {REMOTE_B_UDP_IP}")
     print(f"REMOTE_B_UDP_PORT: {REMOTE_B_UDP_PORT}")
     print(f"ENABLE_XIAO_BLE: {ENABLE_XIAO_BLE}")
-    print(f"BLE_DEVICE_NAME: {BLE_DEVICE_NAME}")
-    print(f"FEEDBACK_TARGET_COLOR: {FEEDBACK_TARGET_COLOR}")
+    print(f"BLE_DEVICE_NAMES: {BLE_DEVICE_NAMES}")
     print("======================================")
 
     set_a = StereoSet("A", A_CALIB_FILE, A_CAM0_INDEX, A_CAM1_INDEX, A_BACKEND)
@@ -1290,10 +1312,14 @@ def main():
     else:
         set_b = None
 
-    ble_feedback = None
+    ble_feedbacks = {}
     if ENABLE_XIAO_BLE:
-        ble_feedback = BleFeedbackController(BLE_DEVICE_NAME, BLE_LED_CHAR_UUID)
-        ble_feedback.start()
+        for color in COLOR_ORDER:
+            device_name = BLE_DEVICE_NAMES.get(color)
+            if device_name:
+                ctrl = BleFeedbackController(device_name, BLE_LED_CHAR_UUID)
+                ctrl.start()
+                ble_feedbacks[color] = ctrl
 
     last_used = {color: None for color in COLOR_ORDER}
     final_states = {}
@@ -1313,9 +1339,16 @@ def main():
     force_ble_state = None
 
     # ステージ内外LED制御用。
-    # 対象色が最後にLIVE検出された時刻を保持し、短時間の遮蔽では消灯しない。
-    last_target_live_time = None
-    target_stage_lost_age = None
+    # 各色が最後にLIVE検出された時刻を保持し、短時間の遮蔽では消灯しない。
+    last_color_live_time = {color: None for color in COLOR_ORDER}
+    color_stage_lost_age = {color: None for color in COLOR_ORDER}
+
+    # ALL CLEAR効果音送信用。
+    # クリアした瞬間だけ、スピーカーを搭載した赤リングへ特殊コマンド251を送る。
+    # 他のリングのLED状態は通常の自動制御のまま変えない。
+    clear_sound_until = 0.0
+    clear_led_until = 0.0
+    clear_sound_sent = False
 
     # 写真保存用
     photo_session_dir = None
@@ -1342,89 +1375,99 @@ def main():
             # =========================
             # XIAO BLEフィードバック
             # =========================
-            target_color = FEEDBACK_TARGET_COLOR
-            target_state = final_states.get(target_color)
+            # 4台のリングそれぞれに、その色の判定結果を送る。
+            # - ステージ外: OFF
+            # - ステージ内・未開始/遠い: WHITE
+            # - ゲーム中・目標に近い: 赤の明るさ
+            # - ゴール内: 赤点滅
+            auto_ble_states = {}
+            ble_display_lines = []
+            now_for_ble = time.time()
 
-            target_goal_ready = (
-                set_a.states[target_color]["target"] is not None
-                or (set_b is not None and set_b.states[target_color]["target"] is not None)
-            )
+            for color in COLOR_ORDER:
+                color_state = final_states.get(color)
 
-            # ステージ内外判定:
-            # A/Bどちらかのカメラセットで対象色がLIVE検出されていれば「ステージ内」
-            # LAST_USEDは、見失い補助には使うが、ステージ内外判定には使わない。
-            target_live_in_stage = bool(
-                target_state
-                and target_state["source"] in ["A_LIVE", "B_LIVE"]
-            )
-
-            # 遮蔽猶予付きのステージ内判定。
-            # target_live_in_stage は「今この瞬間に見えているか」。
-            # target_stage_visible は「今見えている、または直近 STAGE_LOST_GRACE_SEC 秒以内に見えていたか」。
-            stage_now = time.time()
-            if target_live_in_stage:
-                last_target_live_time = stage_now
-                target_stage_lost_age = 0.0
-                target_stage_visible = True
-            else:
-                if last_target_live_time is None:
-                    target_stage_lost_age = None
-                    target_stage_visible = False
-                else:
-                    target_stage_lost_age = stage_now - last_target_live_time
-                    target_stage_visible = target_stage_lost_age <= STAGE_LOST_GRACE_SEC
-
-            if STAGE_VISIBLE_REQUIRES_LIVE:
-                target_visible = target_live_in_stage
-            elif REQUIRE_TARGET_LIVE_FOR_LED:
-                target_visible = target_live_in_stage
-            else:
-                target_visible = bool(
-                    target_state
-                    and target_state["source"] in ["A_LIVE", "B_LIVE", "LAST_USED"]
+                color_goal_ready = (
+                    set_a.states[color]["target"] is not None
+                    or (set_b is not None and set_b.states[color]["target"] is not None)
                 )
 
-            target_distance = target_state["distance"] if target_state else None
-            target_inside = bool(target_state and target_state["inside"])
+                color_live_in_stage = bool(
+                    color_state
+                    and color_state["source"] in ["A_LIVE", "B_LIVE"]
+                )
 
-            if game_active and target_goal_ready and target_visible and target_distance is not None:
-                if target_inside:
-                    red_brightness = FEEDBACK_MAX_RED_BRIGHTNESS
+                if color_live_in_stage:
+                    last_color_live_time[color] = now_for_ble
+                    color_stage_lost_age[color] = 0.0
+                    color_stage_visible = True
                 else:
-                    red_brightness = distance_to_red_brightness(target_distance)
-            else:
-                red_brightness = None
+                    if last_color_live_time[color] is None:
+                        color_stage_lost_age[color] = None
+                        color_stage_visible = False
+                    else:
+                        color_stage_lost_age[color] = now_for_ble - last_color_live_time[color]
+                        color_stage_visible = color_stage_lost_age[color] <= STAGE_LOST_GRACE_SEC
 
-            # BLE送信値の最終決定
-            #   ステージ外: 0 = OFF
-            #   ステージ内・まだ赤フィードバックなし: 1 = WHITE
-            #   ステージ内・ゴール接近/ゴール内: 2-255 = RED brightness
-            if ENABLE_STAGE_VISIBLE_LED:
-                if not target_stage_visible:
-                    auto_ble_state = BleFeedbackController.STATE_OFF
-                elif red_brightness is None:
-                    auto_ble_state = BleFeedbackController.STATE_CONNECTED_WHITE
+                if STAGE_VISIBLE_REQUIRES_LIVE:
+                    color_visible = color_live_in_stage
+                elif REQUIRE_TARGET_LIVE_FOR_LED:
+                    color_visible = color_live_in_stage
                 else:
-                    auto_ble_state = max(
-                        BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE,
-                        min(255, int(red_brightness)),
-                    )
-            else:
-                if red_brightness is None:
-                    auto_ble_state = BleFeedbackController.STATE_CONNECTED_WHITE
-                else:
-                    auto_ble_state = max(
-                        BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE,
-                        min(255, int(red_brightness)),
+                    color_visible = bool(
+                        color_state
+                        and color_state["source"] in ["A_LIVE", "B_LIVE", "LAST_USED"]
                     )
 
-            if ble_feedback is not None:
-                if force_ble_state is None:
-                    ble_feedback.set_state(auto_ble_state)
-                else:
-                    ble_feedback.set_state(force_ble_state)
+                color_distance = color_state["distance"] if color_state else None
+                color_inside = bool(color_state and color_state["inside"])
 
-            target_feedback_on = red_brightness is not None
+                if ENABLE_STAGE_VISIBLE_LED and not color_stage_visible:
+                    auto_state = BleFeedbackController.STATE_OFF
+                    line = f"{color}: 0 OFF"
+                elif game_active and color_goal_ready and color_visible and color_distance is not None:
+                    if color_inside:
+                        auto_state = BLE_GOAL_BLINK_VALUE
+                        line = f"{color}: {BLE_GOAL_BLINK_VALUE} GOAL BLINK"
+                    else:
+                        red_brightness = distance_to_red_brightness(color_distance)
+                        if red_brightness is None:
+                            auto_state = BleFeedbackController.STATE_CONNECTED_WHITE
+                            line = f"{color}: 1 WHITE"
+                        else:
+                            auto_state = max(
+                                BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE,
+                                min(BleFeedbackController.MAX_RED_BRIGHTNESS_VALUE, int(red_brightness)),
+                            )
+                            line = f"{color}: {auto_state} NEAR"
+                else:
+                    auto_state = BleFeedbackController.STATE_CONNECTED_WHITE
+                    line = f"{color}: 1 WHITE"
+
+                auto_ble_states[color] = auto_state
+                ble_display_lines.append(line)
+
+            # ALL CLEAR直後のBLE優先制御。
+            # 1. 赤リングだけに効果音コマンド 251 を短時間だけ送る。
+            # 2. その後、2秒間は4色すべてに 252 を送り、各リング自身の色で最大点灯を維持する。
+            #    これにより overall_clear=True / game_active=False になった直後に白へ戻る視覚的バグを防ぐ。
+            clear_sound_active = now_for_ble < clear_sound_until
+            clear_led_latch_active = now_for_ble < clear_led_until
+
+            for color, ctrl in ble_feedbacks.items():
+                if force_ble_state is not None:
+                    ctrl.set_state(force_ble_state)
+                elif clear_sound_active and color == BLE_CLEAR_SOUND_TARGET_COLOR:
+                    ctrl.set_state(BLE_CLEAR_SOUND_VALUE)
+                elif clear_led_latch_active:
+                    ctrl.set_state(BLE_CLEAR_SOLID_MAX_VALUE)
+                else:
+                    ctrl.set_state(auto_ble_states.get(color, BleFeedbackController.STATE_CONNECTED_WHITE))
+
+            target_feedback_on = any(
+                state >= BleFeedbackController.MIN_RED_BRIGHTNESS_VALUE
+                for state in auto_ble_states.values()
+            )
 
             all_inside = ready and all(final_states[color]["inside"] for color in COLOR_ORDER)
 
@@ -1444,6 +1487,12 @@ def main():
                         overall_clear = True
                         game_active = False
                         clear_time = time.time() - game_start_time if game_start_time is not None else None
+
+                        if ENABLE_XIAO_BLE and not clear_sound_sent:
+                            now_clear = time.time()
+                            clear_sound_until = now_clear + BLE_CLEAR_SOUND_HOLD_SEC
+                            clear_led_until = now_clear + BLE_CLEAR_LED_HOLD_SEC
+                            clear_sound_sent = True
 
                         if ENABLE_PHOTO_CAPTURE:
                             if photo_session_dir is None:
@@ -1689,28 +1738,15 @@ def main():
             if force_ble_state is not None:
                 ble_text = f"BLE LED: FORCE {force_ble_state} (0/1/2, a=auto)"
                 ble_color = (255, 200, 0)
-
-            elif target_feedback_on:
-                if target_state and target_state["inside"]:
-                    ble_text = f"BLE LED: SEND 255 {FEEDBACK_TARGET_COLOR} GOAL"
-                else:
-                    ble_text = f"BLE LED: SEND {red_brightness} {FEEDBACK_TARGET_COLOR} NEAR"
-                ble_color = (0, 255, 255)
-
-            elif ble_feedback is not None and ble_feedback.is_connected:
-                if ENABLE_STAGE_VISIBLE_LED and not target_stage_visible:
-                    ble_text = f"BLE LED: SEND 0 OFF / {FEEDBACK_TARGET_COLOR} OUT OF STAGE"
-                    ble_color = (120, 120, 120)
-                elif ENABLE_STAGE_VISIBLE_LED and not target_live_in_stage:
-                    age_text = "---" if target_stage_lost_age is None else f"{target_stage_lost_age:.1f}s"
-                    ble_text = f"BLE LED: SEND 1 WHITE / {FEEDBACK_TARGET_COLOR} LOST GRACE {age_text}"
-                    ble_color = (255, 255, 255)
-                else:
-                    ble_text = f"BLE LED: SEND 1 WHITE / {FEEDBACK_TARGET_COLOR} IN STAGE"
-                    ble_color = (255, 255, 255)
-
+            elif clear_sound_active:
+                ble_text = f"BLE LED: ALL CLEAR / RED SOUND + 2s COLOR MAX"
+                ble_color = (0, 255, 0)
+            elif ble_feedbacks:
+                connected_count = sum(1 for ctrl in ble_feedbacks.values() if ctrl.is_connected)
+                ble_text = f"BLE LED: {connected_count}/{len(ble_feedbacks)} connected | " + " / ".join(ble_display_lines[:2])
+                ble_color = (255, 255, 255) if connected_count > 0 else (120, 120, 120)
             else:
-                ble_text = "BLE LED: SEARCHING/OFF"
+                ble_text = "BLE LED: disabled"
                 ble_color = (120, 120, 120)
 
             cv2.putText(
@@ -1745,7 +1781,7 @@ def main():
 
             if key == ord("2"):
                 force_ble_state = FEEDBACK_MAX_RED_BRIGHTNESS
-                print("[BLE TEST] force RED MAX: send 255")
+                print(f"[BLE TEST] force RED MAX: send {FEEDBACK_MAX_RED_BRIGHTNESS}")
 
             if key == ord("a"):
                 force_ble_state = None
@@ -1763,6 +1799,9 @@ def main():
                     game_start_time = time.time()
                     clear_time = None
                     clear_logged = False
+                    clear_sound_until = 0.0
+                    clear_led_until = 0.0
+                    clear_sound_sent = False
                     clear_photo_image = None
                     result_display_image = None
                     clear_photo_path = None
@@ -1803,6 +1842,9 @@ def main():
                 game_start_time = None
                 clear_time = None
                 clear_logged = False
+                clear_sound_until = 0.0
+                clear_led_until = 0.0
+                clear_sound_sent = False
 
                 photo_session_dir = None
                 challenge_photo_image = None
@@ -1865,6 +1907,9 @@ def main():
                 game_start_time = None
                 clear_time = None
                 clear_logged = False
+                clear_sound_until = 0.0
+                clear_led_until = 0.0
+                clear_sound_sent = False
                 photo_session_dir = None
                 challenge_photo_image = None
                 clear_photo_image = None
@@ -1890,6 +1935,9 @@ def main():
                 game_start_time = None
                 clear_time = None
                 clear_logged = False
+                clear_sound_until = 0.0
+                clear_led_until = 0.0
+                clear_sound_sent = False
                 photo_session_dir = None
                 challenge_photo_image = None
                 clear_photo_image = None
@@ -1902,10 +1950,11 @@ def main():
                 print("目標座標・最後に使った判定情報・ゲーム開始状態・CLEAR状態をすべてリセットしました。")
 
     finally:
-        if ble_feedback is not None:
-            ble_feedback.set_state(BleFeedbackController.STATE_OFF)
-            time.sleep(0.3)
-            ble_feedback.stop()
+        for ctrl in ble_feedbacks.values():
+            ctrl.set_state(BleFeedbackController.STATE_OFF)
+        time.sleep(0.3)
+        for ctrl in ble_feedbacks.values():
+            ctrl.stop()
 
         set_a.release()
 
