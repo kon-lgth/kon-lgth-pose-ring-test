@@ -608,6 +608,17 @@
       width: min(1240px, 94vw);
       min-height: min(88vh, 840px);
     }
+    .vs-screen.results-mode {
+      justify-content: flex-start;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .vs-screen.results-mode #vsContent {
+      min-height: auto;
+      justify-content: flex-start;
+      padding-bottom: clamp(2rem, 5vh, 4rem);
+    }
     body.vs-active .vs-screen {
       display: flex;
     }

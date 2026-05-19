@@ -732,9 +732,10 @@ function renderVsState(state) {
   if (!active || !screen || !content) {
     sound.setMusicMode('menu');
     _vsSetupReadyShownKey = '';
+    screen?.classList.remove('results-mode', 'winner-mode');
     return;
   }
-  screen.classList.remove('winner-mode');
+  screen.classList.remove('results-mode', 'winner-mode');
 
   if (state.phase !== 'setup' && state.phase !== 'challenge_ready') {
     clearInterval(_vsCountdownTimer);
@@ -873,6 +874,8 @@ function renderVsResults(state) {
     renderVsWinner(state);
     return;
   }
+  screen.classList.add('results-mode');
+  screen.classList.remove('winner-mode');
   screen.style.setProperty('--vs-bg', '#111');
   const page = _vsResultPage;
   const cols = turns.map(turn => {
@@ -911,6 +914,7 @@ function renderVsWinner(state) {
   const screen = document.getElementById('vsScreen');
   const content = document.getElementById('vsContent');
   screen.style.setProperty('--vs-bg', vsBgFor(winner, '#1710c9'));
+  screen.classList.remove('results-mode');
   screen.classList.add('winner-mode');
   if (!_vsWinnerPlayed) {
     _vsWinnerPlayed = true;
